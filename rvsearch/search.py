@@ -43,7 +43,7 @@ class Search(object):
                 priors=[], crit='bic', fap=0.001, min_per=3, max_per=10000,
                 jity=2., manual_grid=None, oversampling=1., trend=False, linear=True,
                 eccentric=False, fix=False, polish=True, baseline=True,
-                mcmc=True, workers=1, verbose=True, save_outputs=True, mstar=None):
+                mcmc=True, workers=1, verbose=True, save_outputs=True, save_plots=False, mstar=None):
 
         if {'time', 'mnvel', 'errvel', 'tel'}.issubset(data.columns):
             self.data = data
@@ -118,6 +118,7 @@ class Search(object):
         self.workers      = workers
         self.verbose      = verbose
         self.save_outputs = save_outputs
+        self.save_plots = save_plots
 
         self.pers = None
         self.periodograms = dict()
@@ -498,7 +499,7 @@ class Search(object):
                         self.post.params[key].value = -self.post.params[key].value
 
             # Generate an orbit plot.
-            if self.save_outputs:
+            if self.save_plots:
                 rvplot = orbit_plots.MultipanelPlot(self.post, saveplot=outdir +
                                                     '/orbit_plot{}.pdf'.format(
                                                     self.num_planets))
