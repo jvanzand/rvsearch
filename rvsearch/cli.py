@@ -148,6 +148,10 @@ def main():
                          type=str, action='store', default='pdf',
                          help="format to save plot [pdf]"
                          )
+    psr_plot.add_argument('--trends_count',
+                         type=bool, action='store_true',
+                         help="Whether to count trends as recoveries"
+                         )
 
 
     psr_plot.set_defaults(func=rvsearch.driver.plots)
