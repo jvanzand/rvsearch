@@ -489,7 +489,7 @@ class CompletenessPlots(object):
             all Search objects.
 
     """
-    def __init__(self, completeness, searches=None):
+    def __init__(self, completeness, searches=None, trends_count=False):
         self.comp = completeness
         if isinstance(searches, list):
             self.searches = searches
@@ -503,6 +503,8 @@ class CompletenessPlots(object):
                      max(completeness.recoveries[completeness.ycol]))
 
         self.xgrid, self.ygrid, self.comp_array = completeness.completeness_grid(self.xlim, self.ylim)
+        
+        self.trends_count = trends_count
 
     def completeness_plot(self, title='', xlabel='', ylabel='',
                           colorbar=True, hide_points=False):
@@ -514,9 +516,17 @@ class CompletenessPlots(object):
             ylabel (string): (optional) y-axis label
             colorbar (bool): (optional) plot colorbar
             hide_points (bool): (optional) if true hide individual injection/recovery points
+            trends_count (bool): (optional) If true, injections recovered only as trends can count
         """
-        good = self.comp.recoveries.query('recovered == True')
-        bad = self.comp.recoveries.query('recovered == False')
+        if self.trends_count==True:
+            good_cond = 'recovered == True | trend_pref == True'
+            bad_cond = 'recovered == False & trend_pref == False'
+        else:
+            good_cond = 'recovered == True'
+            bad_cond = 'recovered == False'
+            
+        good = self.comp.recoveries.query(good_cond)
+        bad = self.comp.recoveries.query(bad_cond)
 
         fig = pl.figure(figsize=(7.5, 5.25))
         pl.subplots_adjust(bottom=0.18, left=0.22, right=0.95)

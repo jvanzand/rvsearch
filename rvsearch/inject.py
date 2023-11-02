@@ -114,7 +114,7 @@ class Injections(object):
             sfile.close()
             
 
-            recovered, recovered_orbel, trend_pref, trend_bic_diff = search.inject_recover(orbel, num_cpus=1, full_grid=self.full_grid)
+            recovered, recovered_orbel, trend_pref, trendel = search.inject_recover(orbel, num_cpus=1, full_grid=self.full_grid)
 
             last_bic = max(search.best_bics.keys())
             bic = search.best_bics[last_bic]
@@ -123,9 +123,8 @@ class Injections(object):
             if self.verbose:
                 counter.value += 1
                 pbar.update_to(counter.value)
-            print("Going to try")
 
-            return recovered, recovered_orbel, bic, thresh, trend_pref, trend_bic_diff
+            return recovered, recovered_orbel, bic, thresh, trend_pref, trendel
 
         outcols = ['inj_period', 'inj_tp', 'inj_e', 'inj_w', 'inj_k',
                    'rec_period', 'rec_tp', 'rec_e', 'rec_w', 'rec_k',
@@ -140,7 +139,7 @@ class Injections(object):
         bics = []
         threshes = []
         trend_prefs = []
-        trend_bic_diffs = []
+        trendels = []
         for i, row in self.injected_planets.iterrows():
             in_orbels.append(list(row.values))
 
@@ -155,13 +154,13 @@ class Injections(object):
         outputs = pool.map(_run_one, in_orbels)
 
         for out in outputs:
-            recovered, recovered_orbel, bic, thresh, trend_pref, trend_bic_diff = out
+            recovered, recovered_orbel, bic, thresh, trend_pref, trendel = out
             out_orbels.append(recovered_orbel)
             recs.append(recovered)
             bics.append(bic)
             threshes.append(thresh)
             trend_prefs.append(trend_pref)
-            trend_bic_diffs.append(trend_bic_diff)
+            trendels.append(trendel)
 
         out_orbels = np.array(out_orbels)
         outdf['rec_period'] = out_orbels[:, 0]
@@ -173,8 +172,12 @@ class Injections(object):
         outdf['recovered'] = recs
         outdf['bic'] = bics
         outdf['bic_thresh'] = threshes
+        
+        trendels = np.array(trendels)
+        outdf['dvdt'] = trendels[:, 0]
+        outdf['curv'] = trendels[:, 1]
+        
         outdf['trend_pref'] = trend_prefs
-        outdf['trend_bic_diff'] = trend_bic_diffs
 
         self.recoveries = outdf
 
@@ -192,7 +195,7 @@ class Completeness(object):
     """
 
     def __init__(self, recoveries, xcol='inj_au', ycol='inj_msini',
-                 mstar=None, rstar=None, teff=None, searches=None):
+                 mstar=None, rstar=None, teff=None, searches=None, trends_count=False):
         """Object to handle a suite of injection/recovery tests
 
         Args:
@@ -232,6 +235,8 @@ class Completeness(object):
 
         self.grid = None
         self.interpolator = None
+        
+        self.trends_count = trends_count
 
     @classmethod
     def from_csv(cls, recovery_file, *args, **kwargs):
@@ -263,7 +268,11 @@ class Completeness(object):
         xinj = self.recoveries[self.xcol]
         yinj = self.recoveries[self.ycol]
 
-        good = self.recoveries['recovered']
+        if self.trends_count:
+            good = self.recoveries[['recovered', 'trend_pref']].any(axis=1) # Is either one True?
+        else:
+            good = self.recoveries['recovered']
+
 
         z = np.zeros((len(ygrid), len(xgrid)))
         last = 0

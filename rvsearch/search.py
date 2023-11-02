@@ -770,9 +770,20 @@ class Search(object):
         else:
             recovered = False
             recovered_orbel = [np.nan for i in range(5)]
+            
             # print("NO")
             # print('trend', self.post.params['dvdt'])
             # print('curv', self.post.params['curv'])
             # print('')
+        if self.trend:
+            if self.trend_pref and self.trend_bic_diff < -10:
+                trend_pref = True
+            else:
+                trend_pref = False
+                
+            trendel = [self.post.params['dvdt'].value, self.post.params['curv'].value]
+        else:
+            trend_pref = False
+            trendel = [np.nan for i in range(2)]
 
-        return recovered, recovered_orbel, self.trend_pref, self.trend_bic_diff
+        return recovered, recovered_orbel, trend_pref, trendel
