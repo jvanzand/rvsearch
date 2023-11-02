@@ -762,19 +762,11 @@ class Search(object):
                 recovered = True
             else:
                 recovered = False
-            # print("YES")
-            # print('trend', self.post.params['dvdt'])
-            # print('curv', self.post.params['curv'])
-            # print(recovered, per, k)
-            # print('')
+
         else:
             recovered = False
             recovered_orbel = [np.nan for i in range(5)]
-            
-            # print("NO")
-            # print('trend', self.post.params['dvdt'])
-            # print('curv', self.post.params['curv'])
-            # print('')
+
         if self.trend:
             if self.trend_pref and self.trend_bic_diff < -10:
                 trend_pref = True
