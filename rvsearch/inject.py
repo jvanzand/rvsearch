@@ -112,8 +112,9 @@ class Injections(object):
             search = pickle.load(sfile)
             search.verbose = False
             sfile.close()
+            
 
-            recovered, recovered_orbel = search.inject_recover(orbel, num_cpus=1, full_grid=self.full_grid)
+            recovered, recovered_orbel, trend_pref, trend_bic_diff = search.inject_recover(orbel, num_cpus=1, full_grid=self.full_grid)
 
             last_bic = max(search.best_bics.keys())
             bic = search.best_bics[last_bic]
@@ -122,8 +123,9 @@ class Injections(object):
             if self.verbose:
                 counter.value += 1
                 pbar.update_to(counter.value)
+            print("Going to try")
 
-            return recovered, recovered_orbel, bic, thresh
+            return recovered, recovered_orbel, bic, thresh, trend_pref, trend_bic_diff
 
         outcols = ['inj_period', 'inj_tp', 'inj_e', 'inj_w', 'inj_k',
                    'rec_period', 'rec_tp', 'rec_e', 'rec_w', 'rec_k',
@@ -137,6 +139,8 @@ class Injections(object):
         recs = []
         bics = []
         threshes = []
+        trend_prefs = []
+        trend_bic_diffs = []
         for i, row in self.injected_planets.iterrows():
             in_orbels.append(list(row.values))
 
@@ -151,11 +155,13 @@ class Injections(object):
         outputs = pool.map(_run_one, in_orbels)
 
         for out in outputs:
-            recovered, recovered_orbel, bic, thresh = out
+            recovered, recovered_orbel, bic, thresh, trend_pref, trend_bic_diff = out
             out_orbels.append(recovered_orbel)
             recs.append(recovered)
             bics.append(bic)
             threshes.append(thresh)
+            trend_prefs.append(trend_pref)
+            trend_bic_diffs.append(trend_bic_diff)
 
         out_orbels = np.array(out_orbels)
         outdf['rec_period'] = out_orbels[:, 0]
@@ -167,6 +173,8 @@ class Injections(object):
         outdf['recovered'] = recs
         outdf['bic'] = bics
         outdf['bic_thresh'] = threshes
+        outdf['trend_pref'] = trend_prefs
+        outdf['trend_bic_diff'] = trend_bic_diffs
 
         self.recoveries = outdf
 

@@ -85,6 +85,7 @@ class Search(object):
                                                 linear=self.linear)
             self.setup  = False
             self.setup_planets = -1
+
         else:
             self.post          = post
             self.params_init   = post.params
@@ -159,7 +160,7 @@ class Search(object):
         post3.params['curv'].vary  = False
 
         flat_bic = post3.likelihood.bic()
-
+        
         if (trend_bic < flat_bic - 5) or (trend_curve_bic < flat_bic - 5):
             if trend_curve_bic < trend_bic - 5:
                 # Quadratic
@@ -167,18 +168,29 @@ class Search(object):
                 self.post.params['curv'].value = post1.params['curv'].value
                 self.post.params['dvdt'].vary  = True
                 self.post.params['curv'].vary  = True
+                
+                self.trend_pref = True
+                self.trend_bic_diff = trend_curve_bic - flat_bic
             else:
                 # Linear
                 self.post.params['dvdt'].value = post2.params['dvdt'].value
                 self.post.params['curv'].value = 0
                 self.post.params['dvdt'].vary  = True
                 self.post.params['curv'].vary  = False
+                
+                self.trend_pref = True
+                self.trend_bic_diff = trend_bic - flat_bic
         else:
             # Flat
             self.post.params['dvdt'].value = 0
             self.post.params['curv'].value = 0
             self.post.params['dvdt'].vary  = False
             self.post.params['curv'].vary  = False
+            
+            self.trend_pref = False
+            self.trend_bic_diff = 0
+        
+        return
 
 
     def add_planet(self):
@@ -240,7 +252,7 @@ class Search(object):
 
 
     def sub_planet(self):
-        """Remove parameters for one  planet from posterior.
+        """Remove parameters for one planet from posterior.
 
         """
         current_num_planets = self.post.params.num_planets
@@ -745,12 +757,22 @@ class Search(object):
                         np.abs(k - ik)/ik <= dthresh]      # check that K is right
 
             criteria = np.array(criteria, dtype=bool)
+
             if criteria.all():
                 recovered = True
             else:
                 recovered = False
+            # print("YES")
+            # print('trend', self.post.params['dvdt'])
+            # print('curv', self.post.params['curv'])
+            # print(recovered, per, k)
+            # print('')
         else:
             recovered = False
             recovered_orbel = [np.nan for i in range(5)]
+            # print("NO")
+            # print('trend', self.post.params['dvdt'])
+            # print('curv', self.post.params['curv'])
+            # print('')
 
-        return recovered, recovered_orbel
+        return recovered, recovered_orbel, self.trend_pref, self.trend_bic_diff

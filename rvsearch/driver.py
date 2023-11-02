@@ -136,7 +136,6 @@ def plots(args):
                 print("Plotting {} vs. {}".format(ycol, xcol))
 
                 mstar = searcher.mstar
-
                 comp = rvsearch.Completeness.from_csv(rfile, xcol=xcol,
                                                       ycol=ycol, mstar=mstar)
                 cplt = rvsearch.plots.CompletenessPlots(comp, searches=[searcher])
