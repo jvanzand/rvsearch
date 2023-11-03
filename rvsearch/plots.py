@@ -518,15 +518,27 @@ class CompletenessPlots(object):
             hide_points (bool): (optional) if true hide individual injection/recovery points
             trends_count (bool): (optional) If true, injections recovered only as trends can count
         """
+        # if self.trends_count==True:
+        #     good_cond = 'recovered == True | trend_pref == True'
+        #     bad_cond = 'recovered == False & trend_pref == False'
+        # else:
+        #     good_cond = 'recovered == True'
+        #     bad_cond = 'recovered == False'
+        
         if self.trends_count==True:
-            good_cond = 'recovered == True | trend_pref == True'
+            good_cond = 'recovered == True'
             bad_cond = 'recovered == False & trend_pref == False'
+            trend_only_cond = 'recovered == False & trend_pref == True'
+            
+            
         else:
             good_cond = 'recovered == True'
             bad_cond = 'recovered == False'
+            trend_only_cond = 'recovered == False & recovered == True' # Empty
             
         good = self.comp.recoveries.query(good_cond)
         bad = self.comp.recoveries.query(bad_cond)
+        trend_only = self.comp.recoveries.query(trend_only_cond)
 
         fig = pl.figure(figsize=(7.5, 5.25))
         pl.subplots_adjust(bottom=0.18, left=0.22, right=0.95)
@@ -537,6 +549,7 @@ class CompletenessPlots(object):
         if not hide_points:
             pl.plot(good[self.comp.xcol], good[self.comp.ycol], 'b.', alpha=0.3, label='recovered')
             pl.plot(bad[self.comp.xcol], bad[self.comp.ycol], 'r.', alpha=0.3, label='missed')
+            pl.plot(trend_only[self.comp.xcol], trend_only[self.comp.ycol], 'g.', alpha=0.3, label='trend')
         ax = pl.gca()
         ax.set_xscale('log')
         ax.set_yscale('log')
