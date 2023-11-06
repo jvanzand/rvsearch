@@ -766,7 +766,8 @@ class Search(object):
         else:
             recovered = False
             recovered_orbel = [np.nan for i in range(5)]
-
+        
+        # Separately check if system has recovered trend
         if self.trend:
             if self.trend_pref and self.trend_bic_diff < -10:
                 trend_pref = True
