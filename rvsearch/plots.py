@@ -543,10 +543,11 @@ class CompletenessPlots(object):
         fig = pl.figure(figsize=(7.5, 5.25))
         pl.subplots_adjust(bottom=0.18, left=0.22, right=0.95)
 
-        name_list = ['xgrid', 'ygrid', 'comp_array']
-        file_list = [self.xgrid, self.ygrid, self.comp_array]
-        for i in range(3):
-            np.save(name_list[i], file_list[i])
+        # ## Save completeness map
+        # np.save('xgrid', self.xgrid)
+        # np.save('ygrid', self.ygrid)
+        # np.save('comp_array', self.comp_array)
+        
             
         CS = pl.contourf(self.xgrid, self.ygrid, self.comp_array, 10, cmap=pl.cm.Reds_r, vmax=0.9)
         # Plot 50th percentile.
