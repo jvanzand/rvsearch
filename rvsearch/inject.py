@@ -112,8 +112,6 @@ class Injections(object):
             search = pickle.load(sfile)
             search.verbose = False
             sfile.close()
-            
-
             recovered, recovered_orbel, trend_pref, trendel = search.inject_recover(orbel, num_cpus=1, full_grid=self.full_grid)
 
             last_bic = max(search.best_bics.keys())

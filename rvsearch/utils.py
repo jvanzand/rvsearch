@@ -82,13 +82,16 @@ def initialize_default_pars(instnames=['inst'], times=None, linear=True,
             anybasis_params['gamma_'+inst] = radvel.Parameter(value=0.0)
         anybasis_params['jit_'+inst] = radvel.Parameter(value=jitty)
 
-    params = anybasis_params.basis.to_any_basis(anybasis_params, fitting_basis)
+    fixed_basis = 'per tc secosw sesinw k' # Hard-code fitting basis so below lines always work
+    params = anybasis_params.basis.to_any_basis(anybasis_params, fixed_basis)
 
     params['secosw1'].vary = False
     params['sesinw1'].vary = False
     params['per1'].vary = False
     params['dvdt'].vary = False
     params['curv'].vary = False
+
+    params = params.basis.to_any_basis(params, fitting_basis) # Now put params back in desired basis
 
     return params
 

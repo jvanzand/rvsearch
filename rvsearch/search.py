@@ -140,6 +140,9 @@ class Search(object):
         post1.params['sesinw1'].vary = False
         post1.params['dvdt'].vary    = True
         post1.params['curv'].vary    = True
+        #print("LIK list/get vary params", self.post.likelihood.list_vary_params(), self.post.likelihood.get_vary_params())
+        #print("POST list/get vary params", self.post.list_vary_params(), self.post.get_vary_params())
+        #print("POST1 list/get vary params", post1.list_vary_params(), post1.get_vary_params())
         post1 = radvel.fitting.maxlike_fitting(post1, verbose=False)
 
         trend_curve_bic = post1.likelihood.bic()
@@ -160,7 +163,6 @@ class Search(object):
         post3.params['curv'].vary  = False
 
         flat_bic = post3.likelihood.bic()
-        
         if (trend_bic < flat_bic - 5) or (trend_curve_bic < flat_bic - 5):
             if trend_curve_bic < trend_bic - 5:
                 # Quadratic
@@ -189,7 +191,6 @@ class Search(object):
             
             self.trend_pref = False
             self.trend_bic_diff = 0
-        
         return
 
 
@@ -235,8 +236,14 @@ class Search(object):
 
         new_params['per{}'.format(new_num_planets)].vary = False
         if not self.eccentric:
+            # Convert to basis containing secosw and sesinw
+            new_params = new_params.basis.to_any_basis(new_params, 'per tc secosw sesinw k')
+
             new_params['secosw{}'.format(new_num_planets)].vary = False
             new_params['sesinw{}'.format(new_num_planets)].vary = False
+
+            # Convert back to fitting basis
+            new_params = new_params.basis.to_any_basis(new_params, fitting_basis)
 
         new_params.num_planets = new_num_planets
 
@@ -393,6 +400,7 @@ class Search(object):
             runner = []
             planets = np.arange(1, self.num_planets+1)
             yres = copy.deepcopy(y)
+            self.post.params = self.post.params.basis.to_synth(self.post.params)
             for p in planets[planets != n]:
                 orbel = [self.post.params['per{}'.format(p)].value,
                          self.post.params['tp{}'.format(p)].value,
@@ -468,6 +476,7 @@ class Search(object):
             # Check whether there is a detection. If so, fit free and proceed.
             if perioder.best_bic > perioder.bic_thresh:
                 self.num_planets += 1
+                
                 for k in self.post.params.keys():
                     self.post.params[k].value = perioder.bestfit_params[k]
 
@@ -685,6 +694,13 @@ class Search(object):
                 self.post.params['k{}'.format(n+1)].vary      = False
                 self.post.params['secosw{}'.format(n+1)].vary = False
                 self.post.params['sesinw{}'.format(n+1)].vary = False
+     
+                ## Manually added by Judah
+                self.post.likelihood.params['per{}'.format(n+1)].vary    = False
+                self.post.likelihood.params['tc{}'.format(n+1)].vary     = False
+                self.post.likelihood.params['k{}'.format(n+1)].vary      = False
+                self.post.likelihood.params['secosw{}'.format(n+1)].vary = False
+                self.post.likelihood.params['sesinw{}'.format(n+1)].vary = False
 
         self.run_search(fixed_threshold=thresh, mkoutdir=False, running=running)
 
