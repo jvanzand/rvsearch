@@ -131,6 +131,7 @@ class Search(object):
         """Perform zero-planet baseline fit, test for significant trend.
 
         """
+       
         post1 = copy.deepcopy(self.post)
         # Fix all Keplerian parameters. K is zero, equivalent to no planet.
         post1.params['k1'].vary      = False
@@ -140,9 +141,7 @@ class Search(object):
         post1.params['sesinw1'].vary = False
         post1.params['dvdt'].vary    = True
         post1.params['curv'].vary    = True
-        #print("LIK list/get vary params", self.post.likelihood.list_vary_params(), self.post.likelihood.get_vary_params())
-        #print("POST list/get vary params", self.post.list_vary_params(), self.post.get_vary_params())
-        #print("POST1 list/get vary params", post1.list_vary_params(), post1.get_vary_params())
+
         post1 = radvel.fitting.maxlike_fitting(post1, verbose=False)
 
         trend_curve_bic = post1.likelihood.bic()
@@ -151,6 +150,8 @@ class Search(object):
         post2 = copy.deepcopy(post1)
         post2.params['curv'].value = 0.0
         post2.params['curv'].vary  = False
+        #print("Boutta fit post2")
+        #print('')
         post2 = radvel.fitting.maxlike_fitting(post2, verbose=False)
 
         trend_bic = post2.likelihood.bic()
@@ -162,7 +163,11 @@ class Search(object):
         post3.params['curv'].value = 0.0
         post3.params['curv'].vary  = False
 
+        #print("Boutta fit post3")
+        #print('')
         flat_bic = post3.likelihood.bic()
+        #print("trend bics", flat_bic, post3.params['dvdt'].value, trend_bic, post2.params['dvdt'].value, trend_curve_bic, post1.params['dvdt'].value)#, self.data.mnvel.iloc[0])
+        #print("trend bics", flat_bic, post3.params['dvdt'].value)
         if (trend_bic < flat_bic - 5) or (trend_curve_bic < flat_bic - 5):
             if trend_curve_bic < trend_bic - 5:
                 # Quadratic
@@ -191,7 +196,127 @@ class Search(object):
             
             self.trend_pref = False
             self.trend_bic_diff = 0
+
         return
+
+    def trend_vs_planet(self):
+        """
+        Determine whether a model with trend, planet, or both is best.
+        Added by Judah to avoid the situation where trend_test says trend
+          is preferred, then a planet gets added later, and the trend and
+          planet share a single signal and give spurious results.
+        """
+
+        ## Move to specified basis to fix params.
+        self.post.params.basis.to_any_basis(self.post.params, "per tc secosw sesinw k")
+        num_planets = self.post.params.num_planets
+
+        # Save the initial vary state of trend and curv for later.
+        # Eg, if trend varies but curv is fixed, then don't bother letting curv vary in tests.
+        dvdt_vary = self.post.params['dvdt'].vary
+        curv_vary = self.post.params['curv'].vary
+
+
+        post1 = copy.deepcopy(self.post)
+        # Remove the most recent planet to test if trend explains signal
+        post1.params['k{}'.format(num_planets)].value = 0
+        for param_name in ['per', 'tc', 'secosw', 'sesinw', 'k']:
+            post1.params[param_name+'{}'.format(num_planets)].vary = False
+        #import pdb; pdb.set_trace()
+        post1.params['dvdt'].vary = dvdt_vary
+        post1.params['curv'].vary = curv_vary
+
+        post1 = radvel.fitting.maxlike_fitting(post1, verbose=False)
+        trend_curv_bic = post1.likelihood.bic()
+
+       
+        post2 = copy.deepcopy(self.post)
+        # Remove the trend to test if most recent planet explains signal
+        post2.params['per{}'.format(num_planets)].vary = False # Hold period constant
+        for param_name in ['tc', 'secosw', 'sesinw', 'k']:
+            post2.params[param_name+'{}'.format(num_planets)].vary = True
+
+        post2.params['dvdt'].value = 0
+        post2.params['dvdt'].vary = False
+        post2.params['curv'].value = 0
+        post2.params['curv'].vary = False
+
+        post2 = radvel.fitting.maxlike_fitting(post2, verbose=False)
+        planet_bic = post2.likelihood.bic()
+
+        # Assign the winning model's parameters to self.post
+        if planet_bic < trend_curv_bic - 5: # Planet has to win by a ΔΒΙC of 5
+            #print("Planet won")
+            for k in post2.params.keys():
+                self.post.params[k] = post2.params[k] # Assign value and vary state to self.post
+        
+        else: # Otherwise assign trend params to self.post
+            #print("Trend won")
+            for k in post1.params.keys():
+                self.post.params[k] = post1.params[k]
+                #post2.params[k].vary = False
+
+                # Now free trend/curv to see if they improve the planetary fit
+                #post2.params['dvdt'].vary = True
+                #post2.params['curv'].vary = True
+
+                #post2 = radvel.fitting.maxlike_fitting(post2, verbose=False)
+                #planet_w_trend_bic = post2.likelihood.bic()
+
+                #if planet_w_trend_bic < planet_bic - 5:
+                   
+
+
+        #post3 = copy.deepcopy(self.post)
+        # Free both trend and most recent planet parameters
+        #post3.params['per{}'.format(num_planets)].vary = False # Hold period constant
+        #for param_name in ['tc', 'secosw', 'sesinw', 'k']:
+        #    post3.params[param_name+'{}'.format(num_planets)].vary = True
+
+        #post3.params['dvdt'].vary = dvdt_vary
+        #post3.params['curv'].vary = curv_vary
+
+        #post3 = radvel.fitting.maxlike_fitting(post3, verbose=False)
+        #planet_trend_bic = post3.likelihood.bic()
+
+        #print("Trend, planet", trend_curv_bic, planet_bic)
+        plott=False
+        if plott:
+            import matplotlib.pyplot as plt
+            plt.close()
+
+            model_y = post1.likelihood.model(post1.likelihood.x) + post1.params['gamma_j'].value    
+            plt.scatter(post1.likelihood.x, post1.likelihood.y, c='r', label='data')
+            plt.scatter(post1.likelihood.x, model_y, c='b', label='model')
+            plt.legend()
+            plt.savefig("post1.png")
+            plt.close()
+            #print("p1", post1.params['dvdt'].value, post1.params['dvdt'].vary, post1.params['curv'].vary,  post1.params['k2'].value)
+
+            model_y = post2.likelihood.model(post2.likelihood.x) + post2.params['gamma_j'].value    
+            plt.scatter(post2.likelihood.x, post2.likelihood.y, c='r', label='data')
+            plt.scatter(post2.likelihood.x, model_y, c='b', label='model')
+            plt.legend()
+            plt.savefig("post2.png")
+            plt.close()
+            #print("p2", post2.params['dvdt'].value, post2.params['dvdt'].vary, post2.params['curv'].vary, post2.params['k2'].value)
+
+        #model_y = post3.likelihood.model(post3.likelihood.x) + post3.params['gamma_j'].value    
+        #plt.scatter(post3.likelihood.x, post3.likelihood.y, c='r', label='data')
+        #plt.scatter(post3.likelihood.x, model_y, c='b', label='model')
+        #plt.legend()
+        #plt.savefig("post3.png")
+        #plt.close()
+        #print("p3", post3.params['dvdt'].value, post3.params['dvdt'].vary, post3.params['curv'].vary, post3.params['k2'].value)
+
+
+
+        
+        ## Revert to synthesis basis to avoid mixing bases.
+        self.post.params.basis.to_any_basis(self.post.params, "per tp e w k")
+
+        return
+
 
 
     def add_planet(self):
@@ -209,6 +334,7 @@ class Search(object):
                                                      fitting_basis=fitting_basis)
         new_params = radvel.Parameters(new_num_planets, basis=fitting_basis)
 
+                
         for planet in np.arange(1, new_num_planets):
             for par in param_list:
                 parkey = par + str(planet)
@@ -225,7 +351,7 @@ class Search(object):
             parkey = par + str(new_num_planets)
             onepar = par + '1'  # MESSY, FIX THIS 10/22/18
             new_params[parkey] = default_params[onepar]
-
+        
         new_params['dvdt'] = self.post.params['dvdt']
         new_params['curv'] = self.post.params['curv']
 
@@ -244,7 +370,7 @@ class Search(object):
 
             # Convert back to fitting basis
             new_params = new_params.basis.to_any_basis(new_params, fitting_basis)
-
+        
         new_params.num_planets = new_num_planets
 
         # Respect setup file priors.
@@ -252,10 +378,26 @@ class Search(object):
             priors = self.priors
         else:
             priors = []
+
+        
+        # Judah addition: Params that should have been listed in extra_params in the setup file, eg GP params
+        forgotten_params = [prm for prm in self.post.list_params() if prm not in new_params.keys()]
+        for prm in forgotten_params:
+            new_params[prm] = self.post.params[prm]
+
+        # Judah addition: find median data point and subtract that RV off of whole data set
+        # Purpose: "zero" the data set so it's not offset by a constant; in a real search, we don't know if a whole data set is offset.
+        #median_ind = np.argmin(abs(self.data.time - self.data.time.median()))
+        #median_rv = self.data.mnvel.iloc[median_ind]
+        mean_rv = np.mean(self.data.mnvel)
+        self.data.mnvel = self.data.mnvel - mean_rv
+        
         priors.append(radvel.prior.PositiveKPrior(new_num_planets))
         priors.append(radvel.prior.EccentricityPrior(new_num_planets))
         new_post = utils.initialize_post(self.data, new_params, priors)
         self.post = new_post
+        #print("X data add_planet: ", self.post.likelihood.x[:5])
+        #print("Y data add_planet: ", self.post.likelihood.y[:5])
 
 
     def sub_planet(self):
@@ -335,6 +477,7 @@ class Search(object):
 
             fit_params = []
             power = []
+            #print("Params in run_search PREE fit_orbit", *[self.post.params["k{}".format(p+1)] for p in range(self.post.params.num_planets)], sep="\n")
             for per in subgrid:
                 for k in default_pdict.keys():
                     self.post.params[k].value = default_pdict[k]
@@ -348,11 +491,16 @@ class Search(object):
                 for k in fit.params.keys():
                     best_params[k] = fit.params[k].value
                 fit_params.append(best_params)
-
+            #print("Params in run_search POSTT fit_orbit", *[self.post.params["k{}".format(p+1)] for p in range(self.post.params.num_planets)], sep="\n")
             fit_index = np.argmax(power)
             bestfit_params = fit_params[fit_index]
+            
             for k in self.post.params.keys():
                 self.post.params[k].value = bestfit_params[k]
+            
+            # Best params just got assigned, but maxlike hasn't been performed with period free yet
+            #self.trend_vs_planet()
+
             self.post.params['per{}'.format(self.num_planets)].vary = True
 
         self.post = radvel.fitting.maxlike_fitting(self.post, verbose=False)
@@ -438,11 +586,12 @@ class Search(object):
 
         if self.trend:
             self.trend_test()
-
+        
         run = True
         while run:
             if self.num_planets != 0:
                 self.add_planet()
+
 
             perioder = periodogram.Periodogram(self.post, basebic=self.basebic,
                                                minsearchp=self.min_per,
@@ -454,12 +603,16 @@ class Search(object):
                                                eccentric=self.eccentric,
                                                workers=self.workers,
                                                verbose=self.verbose)
+            #print("PERIODSSS", perioder.pers)
             # Run the periodogram, store arrays and threshold (if computed).
+            
             perioder.per_bic()
+            #print("THIS IS THE BIC", perioder.bic)
+            #sdfdsf
             self.periodograms[self.num_planets] = perioder.power[self.crit]
             if self.num_planets == 0 or self.pers is None:
                 self.pers = perioder.pers
-
+            
             if fixed_threshold is None:
                 perioder.eFAP()
                 self.eFAPs[self.num_planets] = perioder.fap_min
@@ -467,18 +620,32 @@ class Search(object):
                 perioder.bic_thresh = fixed_threshold
             self.bic_threshes[self.num_planets] = perioder.bic_thresh
             self.best_bics[self.num_planets] = perioder.best_bic
-
+            #print("Thresh and best", perioder.bic_thresh, perioder.best_bic)
             if self.save_outputs:
                 perioder.plot_per()
                 perioder.fig.savefig(outdir+'/dbic{}.pdf'.format(
                                      self.num_planets+1))
-
+            #import matplotlib.pyplot as pl
+            #pl.close()
+            #print("Per2 in run_search", self.post.params['per2'])
+            #pl.scatter(self.data['time'], self.data['mnvel'], c='orange', label='Data')
+            #pl.scatter(self.data['time'], self.post.residuals(), c='Blue', label='Resid')
+            #pl.legend()
+            #pl.savefig('manual_inj_newonly.png')
+            #print("The params in run_search", self.post.params)
+            #print(" ")
             # Check whether there is a detection. If so, fit free and proceed.
+            #print("THE BICS", perioder.best_bic, perioder.bic_thresh)
             if perioder.best_bic > perioder.bic_thresh:
+                #print("Planet passed BIC thresh", perioder.best_bic, perioder.bic_thresh)
                 self.num_planets += 1
                 
                 for k in self.post.params.keys():
                     self.post.params[k].value = perioder.bestfit_params[k]
+                    #if 'per' in k:
+                        #print("New planet period assigned", self.post.params[k].value)
+                #print("Here's the params", self.post.params)
+                #print(' ')
 
                 # Generalize tc reset to each new discovery.
                 tckey = 'tc{}'.format(self.num_planets)
@@ -491,7 +658,7 @@ class Search(object):
                         self.post.params['secosw{}'.format(n)].vary = False
                         if n != self.num_planets:
                             self.post.params['tc{}'.format(n)].vary = False
-
+                    
                     self.post = radvel.fitting.maxlike_fitting(self.post,
                                                                verbose=False)
 
@@ -501,10 +668,28 @@ class Search(object):
                         self.post.params['secosw{}'.format(n)].vary = True
                         self.post.params['secosw{}'.format(n)].vary = True
                         self.post.params['tc{}'.format(n)].vary = True
-
+                #print("Params in run_search PRE fit_orbit", *[self.post.params["k{}".format(p+1)] for p in range(self.post.params.num_planets)], sep="\n")
                 self.fit_orbit()
                 self.all_params.append(self.post.params)
                 self.basebic = self.post.likelihood.bic()
+                #print("Params in run_search POST fit_orbit", *[self.post.params["k{}".format(p+1)] for p in range(self.post.params.num_planets)], sep="\n")
+                #print("")
+
+                #import matplotlib.pyplot as plt
+                #plt.close()
+                #model_y = self.post.likelihood.model(self.post.likelihood.x) + self.post.params['gamma_j'].value
+                #plt.scatter(self.post.likelihood.x, self.post.likelihood.y, c='r', label='data')
+                #plt.scatter(self.post.likelihood.x, model_y, c='b', label='model')
+                #plt.savefig("data_model_compare_FINAL.png")
+                #plt.close()
+
+                #fake_x = np.linspace(2457000, 2460200, 300)
+                #fake_y = self.post.likelihood.model(fake_x) + self.post.params['gamma_j'].value
+                #plt.plot(fake_x, fake_y, label="extended model")
+                #plt.legend()
+                #plt.savefig("compare_in_search.png")
+                #plt.close()
+
             else:
                 self.sub_planet()
                 # 8/3: Update the basebic anyway, for injections.
@@ -512,7 +697,6 @@ class Search(object):
                 run = False
             if self.num_planets >= self.max_planets:
                 run = False
-
             # If any jitter values are negative, flip them.
             for key in self.post.params.keys():
                 if 'jit' in key:
@@ -686,6 +870,9 @@ class Search(object):
         else:
             thresh = None
 
+        ## Judah addition. Move to specified basis to fix params. Stay in that basis for run_search()
+        self.post.params.basis.to_any_basis(self.post.params, "per tc secosw sesinw k")
+
         # Fix parameters of all known planets.
         if self.num_planets != 0:
             for n in np.arange(self.num_planets):
@@ -695,13 +882,15 @@ class Search(object):
                 self.post.params['secosw{}'.format(n+1)].vary = False
                 self.post.params['sesinw{}'.format(n+1)].vary = False
      
-                ## Manually added by Judah
+                ## Manually added by Judah: params in likelihood should be fixed too.
                 self.post.likelihood.params['per{}'.format(n+1)].vary    = False
                 self.post.likelihood.params['tc{}'.format(n+1)].vary     = False
                 self.post.likelihood.params['k{}'.format(n+1)].vary      = False
                 self.post.likelihood.params['secosw{}'.format(n+1)].vary = False
                 self.post.likelihood.params['sesinw{}'.format(n+1)].vary = False
+        
 
+        #print("Params in continue_search", *[self.post.params["per{}".format(p+1)] for p in range(self.post.params.num_planets)], sep="\n")
         self.run_search(fixed_threshold=thresh, mkoutdir=False, running=running)
 
     def inject_recover(self, injected_orbel, num_cpus=None, full_grid=False):
@@ -726,16 +915,36 @@ class Search(object):
         # 8/2: Trying to fix injections, possibly basebic error.
         self.basebic = None
         if not full_grid:
-            self.manual_grid = [injected_orbel[0]]
+            self.manual_grid = [injected_orbel[0]] # Judah comment: isn't this cheating? We should be blind to injected period.
+            #self.manual_grid = [100]
             fixed_threshold = True
         else:
-            fixed_threshold = False
-            # self.manual_grid = self.pers[::4]
+            #print("full_grid worked")
+            fixed_threshold = True
+            self.manual_grid = self.pers[::4]
 
+
+        ## Judah addition: make sure we're in synthesis basis before generating model RVs.
+        self.post.params.basis.to_any_basis(self.post.params, "per tp e w k")
         mod = radvel.kepler.rv_drive(self.data['time'].values, injected_orbel)
+
+
+        #import matplotlib.pyplot as plt
+        #plt.close()
+        #plt.scatter(self.data.time, self.data.mnvel, c='r', label='before')
 
         self.data['mnvel'] += mod
 
+        self.post = utils.initialize_post(self.data, self.post.params, self.post.priors) # Judah addition to include updated data in post. Might be redundant with add_planet() lines, but seems to make a difference.
+
+        #plt.scatter(self.data.time, self.data.mnvel, c='b', label='after')
+        #plt.legend()
+        #plt.savefig("before_after.png")
+        #plt.close()
+        #print("X data inj_recov: ", self.post.likelihood.x[:5])
+        #print("Y data inj_recov: ", self.post.likelihood.y[:5])
+
+        
         self.continue_search(fixed_threshold, running=False)
 
         # Determine successful recovery
@@ -785,7 +994,9 @@ class Search(object):
         
         # Separately check if system has recovered trend
         if self.trend:
-            if self.trend_pref and self.trend_bic_diff < -10:
+            dvdt = self.post.params['dvdt'].value
+            trend_floor = 8/(3*365.25)*2
+            if self.trend_pref and self.trend_bic_diff < -10 and abs(dvdt)>trend_floor:
                 trend_pref = True
             else:
                 trend_pref = False
@@ -794,5 +1005,18 @@ class Search(object):
         else:
             trend_pref = False
             trendel = [np.nan for i in range(2)]
+                
+
+        plot_final = False
+        if plot_final:
+            import matplotlib.pyplot as plt
+            plt.close()
+            model_y = self.post.likelihood.model(self.post.likelihood.x) + self.post.params['gamma_j'].value   
+            plt.scatter(self.post.likelihood.x, self.post.likelihood.y, c='r', label='data')
+            plt.scatter(self.post.likelihood.x, model_y, c='b', label='model')
+            plt.legend()
+            plt.savefig("final_model.png")
+            plt.close()
+
 
         return recovered, recovered_orbel, trend_pref, trendel
