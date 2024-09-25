@@ -96,13 +96,14 @@ def initialize_default_pars(instnames=['inst'], times=None, linear=True,
     return params
 
 
-def initialize_post(data, params=None, priors=[], linear=True, decorrs=None):
+def initialize_post(data, params=None, priors=[], linear=True, decorrs=None, time_base=None):
     """Initialize a posterior object with data, params, and priors.
     Args:
         data: a pandas dataframe.
         params: a list of radvel parameter objects.
         priors: a list of priors to place on the posterior object.
         decorrs: a list of decorrelation vectors.
+        time_base: The reference epoch from which trend/curv are calculated
     Returns:
         post (radvel Posterior object)
 
@@ -118,7 +119,8 @@ def initialize_post(data, params=None, priors=[], linear=True, decorrs=None):
         data['time'] = data['jd']
 
     # initialize RVModel
-    time_base = np.mean([data['time'].max(), data['time'].min()])
+    if time_base==None:
+        time_base = np.mean([data['time'].max(), data['time'].min()])
     mod = radvel.RVModel(params, time_base=time_base)
 
     # initialize Likelihood objects for each instrument
@@ -133,6 +135,9 @@ def initialize_post(data, params=None, priors=[], linear=True, decorrs=None):
 
         likes[inst].params['gamma_'+inst] = iparams['gamma_'+inst]
         likes[inst].params['jit_'+inst] = iparams['jit_'+inst]
+
+    #if temp_191939:
+        #import pdb; pdb.set_trace()
     # Can this be cleaner? like = radvel.likelihood.CompositeLikelihood(likes)
     like = radvel.likelihood.CompositeLikelihood(list(likes.values()))
 
@@ -386,4 +391,4 @@ values. Interpret posterior with caution.".format(num_nan, nan_perc))
 
     print("Derived parameters:", outcols)
 
-    return post
+    return post, synthchains

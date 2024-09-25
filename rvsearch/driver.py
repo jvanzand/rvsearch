@@ -86,8 +86,12 @@ def injections(args):
             print("No search file found in {}".format(sdir))
             os._exit(1)
 
+        #import pdb; pdb.set_trace()
+
         if not os.path.exists('recoveries.csv') or args.overwrite:
             try:
+            #import pdb; pdb.set_trace()
+                #print("driver.py: Going into injections")
                 inj = rvsearch.inject.Injections(sfile, plim, klim, elim,
                                                  num_sim=args.num_inject,
                                                  full_grid=args.full_grid,
@@ -95,7 +99,9 @@ def injections(args):
                                                  beta_e=beta_e)
                 recoveries = inj.run_injections(num_cpus=args.num_cpus)
                 inj.save()
-            except IOError:
+            except IOError as err:
+                #import pdb; pdb.set_trace()
+                print("THE ERR IS: ", err)
                 print("WARNING: Problem with {}".format(sfile))
                 os._exit(1)
         else:
@@ -136,20 +142,34 @@ def plots(args):
                 print("Plotting {} vs. {}".format(ycol, xcol))
 
                 mstar = searcher.mstar
-                trends_count = args.trends_count
-                comp = rvsearch.Completeness.from_csv(rfile, xcol=xcol,
-                                                      ycol=ycol, mstar=mstar, trends_count=trends_count)
-                cplt = rvsearch.plots.CompletenessPlots(comp, searches=[searcher], trends_count=trends_count)
 
-                fig = cplt.completeness_plot(title=run_name,
+                #import pdb; pdb.set_trace()
+                ## Resolved map
+                comp1 = rvsearch.Completeness.from_csv(rfile, xcol=xcol,
+                                                      ycol=ycol, mstar=mstar)
+                cplt1 = rvsearch.plots.CompletenessPlots(comp1, searches=[searcher], trends_count=False)
+
+                fig1 = cplt1.completeness_plot(title=run_name,
                                              xlabel=xlabel,
-                                             ylabel=ylabel)
+                                             ylabel=ylabel, trends_count=False)
+                saveto1 = os.path.join(run_name+'_recoveries.{}'.format(args.fmt))
+                fig1.savefig(saveto1, dpi=200, bbox_inches='tight')
 
-                saveto = os.path.join(run_name+'_recoveries.{}'.format(args.fmt))
+                ## Trend map
+                comp2 = rvsearch.Completeness.from_csv(rfile, xcol=xcol,
+                                                      ycol=ycol, mstar=mstar)
+                cplt2 = rvsearch.plots.CompletenessPlots(comp2, searches=[searcher], trends_count=True)
 
-                fig.savefig(saveto, dpi=200)
-                print("Recovery plot saved to {}".format(
-                      os.path.abspath(saveto)))
+                fig2 = cplt2.completeness_plot(title=run_name,
+                                             xlabel=xlabel,
+                                             ylabel=ylabel,
+                                             trends_count=True)
+                saveto2 = os.path.join(run_name+'_recoveries_trends.{}'.format(args.fmt))
+                fig2.savefig(saveto2, dpi=200, bbox_inches='tight')
+
+
+                print("Recovery plots saved to {}".format(
+                      os.path.abspath(saveto1)))
 
             if ptype == 'summary':
                 plotter = rvsearch.plots.PeriodModelPlot(searcher,

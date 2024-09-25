@@ -57,7 +57,8 @@ class Periodogram(object):
     def __init__(self, post, basebic=None, minsearchp=3, maxsearchp=10000,
                  baseline=True, basefactor=5., oversampling=1., manual_grid=None,
                  fap=0.001, num_pers=None, eccentric=False, workers=1,
-                 verbose=True):
+                 verbose=True, starname='star'):
+        self.starname = starname
         self.post = copy.deepcopy(post)
         self.default_pdict = {}
         for k in post.params.keys():
@@ -150,8 +151,10 @@ class Periodogram(object):
         else:
             if self.num_pers is None:
                 self.pers = self.per_spacing()
+
             else:
                 self.pers = (1/np.linspace(1/self.maxsearchP, 1/self.minsearchP,self.num_pers))[::-1]
+                
 
         self.freqs = 1/self.pers
 
@@ -162,6 +165,10 @@ class Periodogram(object):
 
         prvstr = str(self.post.params.num_planets-1)
         plstr = str(self.post.params.num_planets)
+        
+        #if "gamma_k" not in self.post.params.keys():
+            #print("Entered per_bic", self.post.params.keys())
+            #fsdfds
         if self.verbose:
             print("Calculating BIC periodogram for {} planets vs. {} planets".format(plstr, prvstr))
         # This assumes nth planet parameters, and all periods, are fixed.
@@ -176,6 +183,7 @@ class Periodogram(object):
                 # Vary ONLY gamma, jitter, dvdt, curv. All else fixed, and k=0
                 baseline_fit = radvel.fitting.maxlike_fitting(self.post, verbose=False)
                 baseline_bic = baseline_fit.likelihood.bic()
+
             # Handle the case where there is at least one known planet.
             else:
                 self.post.params['per{}'.format(self.num_known_planets+1)].vary = False
@@ -190,6 +198,10 @@ class Periodogram(object):
 
         rms = np.std(self.post.likelihood.residuals())
         self.default_pdict['k{}'.format(self.post.params.num_planets)] = rms
+
+        #print("The baseline!", baseline_bic)
+        #import pdb; pdb.set_trace()
+
 
         # Allow amplitude and time offset to vary, fix period (and ecc. if asked.)
         self.post.params['per{}'.format(self.num_known_planets+1)].vary = False
@@ -207,7 +219,69 @@ class Periodogram(object):
 
         # Divide period grid into as many subgrids as there are parallel workers.
         self.sub_pers = np.array_split(self.pers, self.workers)
-        
+        #print("YEEEER", self.pers)
+        #sdfd
+        #import pdb; pdb.set_trace()
+
+
+        single_use = False
+        if single_use:
+            #### For single use ######
+            post = copy.deepcopy(self.post)
+            #per_array = self.sub_pers[n]
+            #fit_params = [{} for x in range(len(per_array))]
+            #bic = np.zeros_like(per_array)
+
+            for p in post.params.keys():
+                if "gamma" in p:
+                    post.params[p].vary = True
+
+            per = 444
+            for k in self.default_pdict.keys():
+                post.params[k].value = self.default_pdict[k]
+                
+            perkey = 'per{}'.format(self.num_known_planets+1)
+            post.params[perkey].value = per
+
+            post.params['jit_j'].vary = True
+
+            print("Pre-Paramssss", post.params['per2'].value, post.params['k2'].value, post.params['k2'].vary)
+            ##
+            data_x = post.likelihood.x
+            data_y = post.likelihood.y
+            #print("Check 2: ", data_x[11], data_y[11])
+            model_x = np.linspace(np.min(data_x), np.max(data_x), 600)
+            model_y = post.likelihood.model(model_x) + post.params['gamma_j'].value
+            #model_y = post.likelihood.model(post.likelihood.x) + post.params['gamma_j'].value
+            import matplotlib.pyplot as plt
+            plt.close()
+                   
+            plt.scatter(data_x, data_y, c='r', label='data')
+            plt.plot(model_x, model_y, c='b', label='model')
+            plt.legend()
+            plt.savefig("data_model_compare_pre.png")
+            plt.close()
+
+            post = radvel.fitting.maxlike_fitting(post, verbose=False)
+
+
+            plt.close()
+            data_x = post.likelihood.x
+            data_y = post.likelihood.y
+            model_x = np.linspace(np.min(data_x), np.max(data_x)+600, 2000)
+            model_y = post.likelihood.model(model_x) + post.params['gamma_j'].value
+            #import pdb; pdb.set_trace()
+
+            plt.scatter(data_x, data_y, c='r', label='data')
+            plt.plot(model_x, model_y, c='b', label='model')
+            plt.legend()
+            plt.savefig("data_model_compare_post.png")
+            plt.close()
+            ##########################
+            bic = baseline_bic - post.likelihood.bic()
+            #print("THE single BIC", baseline_bic, post.likelihood.bic, bic)
+            #import pdb; pdb.set_trace()
+            #sdfsd
         
         # Define a function to compute periodogram for a given grid section.
         def _fit_period(n):
@@ -215,126 +289,129 @@ class Periodogram(object):
             per_array = self.sub_pers[n]
             fit_params = [{} for x in range(len(per_array))]
             bic = np.zeros_like(per_array)
-            #print("PER ARRAY", per_array)
+
+            
 
             ## Judah addition: let offsets float to avoid analytic value in radvel.likelihood.residuals
             for p in post.params.keys():
                 if "gamma" in p:
                     post.params[p].vary = True
 
-
+            
             for i, per in enumerate(per_array):
+
                 
                 # Reset posterior parameters to default values.
                 for k in self.default_pdict.keys():
                     post.params[k].value = self.default_pdict[k]
+
+                    
+                    #if "jit" in k:
+                       # if post.params[k].value>10:
+                           # post.params[k].value = 5
+
+                     
                 
                 perkey = 'per{}'.format(self.num_known_planets+1)
                 post.params[perkey].value = per
  
-                #if len(per_array)==1:
-                    #print("This is per", per)
-                    #sfsd
-                    #model_y = post.likelihood.model(post.likelihood.x)
 
-                    #print("We're plotting babbyyyy", post.residuals()[:3])
-                    #print("Vals in per", post.likelihood.y[:3], model_y[:3], post.params['gamma_j'].value)
-                    #print(post.list_vary_params())
-                    #print(post.get_vary_params())
-                    #import matplotlib.pyplot as plt
-                    #plt.close()
-                   
-
-                    #plt.scatter(post.likelihood.x, post.likelihood.y, c='r')
-                    #plt.scatter(post.likelihood.x, model_y, c='b')
-                    #plt.savefig("data_model_compare_pre.png")
-
-
-                    #print("Pre-params", post.list_vary_params())
-                    #print(post.params)
-              
                 plott=False
                 if plott:
-                    if 1500 < per < 1700:
-                        #print("Pre-params", post.list_vary_params())
-                        #print("Per3_pre", post.params['per3'].value, post.params['k3'].value, post.params['gamma_j'].value)
+                    if 107<per<108:
+                        print("Pre-Paramssss", post.params['k1'].value, post.params['k1'].vary, post.params['k2'].value, post.params['k2'].vary)
+
+
+                        #post.params['jit_j'].value=5
+                        #post.params['jit_j'].vary=True
+
+
                         ##
-                        model_y = post.likelihood.model(post.likelihood.x) + post.params['gamma_j'].value
+                        data_x = post.likelihood.x
+                        data_y = post.likelihood.y
+                        #print("Check 2: ", data_x[11], data_y[11])
+                        model_x = np.linspace(np.min(data_x), np.max(data_x), 2000)
+                        model_y = post.likelihood.model(model_x) + post.params['gamma_j'].value
+                        #model_y = post.likelihood.model(post.likelihood.x) + post.params['gamma_j'].value
                         import matplotlib.pyplot as plt
                         plt.close()
                    
-                        plt.scatter(post.likelihood.x, post.likelihood.y, c='r', label='data')
-                        plt.scatter(post.likelihood.x, model_y, c='b', label='model')
+                        plt.plot(model_x, model_y, c='b', label='model', zorder=1)
+                        plt.scatter(data_x, data_y, c='r', label='data', zorder=2)
+
                         plt.legend()
-                        plt.savefig("data_model_compare_pre.png")
+                        plt.savefig("data_model_compare_pre_{}.png".format(per))
                         plt.close()
-                        #plt.show()
+
+                        #print("AND MY gamma pre", post.params['gamma_j'].value, post.params['gamma_apf'].value)
 
                 post = radvel.fitting.maxlike_fitting(post, verbose=False)
 
-
+                #print(self.pers)
                 if plott:
-                    if 1500 < per < 1700:
-                        #print("Post-params", post.list_vary_params())
-                        #print("NNN", post.params.num_planets)
-                        #print("Paramssss", post.params['per2'].value, post.params['k2'].value, post.params['gamma_j'].value)
+                    if 107<per<108:
+                        #print("Post-params", post.params['k2'], post.params['dvdt'], post.params['curv'])
+                        print("Post-Paramssss", post.params['k1'].value, post.params['k1'].vary, post.params['k2'].value, post.params['k2'].vary)
+                        #print("Post-Paramssss", post.params['per1'].value, post.params['k1'].value, post.params['k1'].vary)
                         #print('')
 
                         #print("model BIC", post.likelihood.bic(), baseline_bic)
 
                         plt.close()
-                        model_y = post.likelihood.model(post.likelihood.x) + post.params['gamma_j'].value
-                        plt.scatter(post.likelihood.x, post.likelihood.y, c='r', label='data')
-                        plt.scatter(post.likelihood.x, model_y, c='b', label='model')
+                        data_x = post.likelihood.x
+                        data_y = post.likelihood.y
+                        model_x = np.linspace(np.min(data_x), np.max(data_x), 2000)
+                        model_y = post.likelihood.model(model_x) + post.params['gamma_j'].value
+                        #import pdb; pdb.set_trace()
+
+                        plt.plot(model_x, model_y, c='b', label='model', zorder=1)
+                        plt.scatter(data_x, data_y, c='r', label='data', zorder=2)
+                        print("AND MY Num pleez", post.params.num_planets)
+
                         plt.legend()
-                        plt.savefig("data_model_compare_post.png")
+                        plt.savefig("data_model_compare_post_{}.png".format(per))
                         plt.close()
-                        #print("1600-day stats")
-                        #print("    BICs", baseline_bic - post.likelihood.bic())
-                        #resids = post.likelihood.residuals()
-                        #print("    Rezzies", np.min(abs(resids)), np.max(abs(resids)), np.median(abs(resids)))
-                       #print("    Loglik", post.likelihood.logprob())
+                        print("THE single BIC", baseline_bic, post.likelihood.bic(), baseline_bic-post.likelihood.bic())
+                        #sdfsdfs
 
-                    
-                    
-                #if len(per_array)==1:
-                    #model_y = post.likelihood.model(post.likelihood.x)
-                    
-                    #plt.close()
-                    #plt.scatter(post.likelihood.x, post.likelihood.y, c='r')
-                    
-                    #plt.scatter(post.likelihood.x, model_y, c='b')
-                    #plt.savefig("data_model_compare_post.png")
-                    #print("Second plot babyyy")
-
-                    #print("Post-params", post.residuals()[:3])
-                    #print(post.likelihood.y[:3], model_y[:3], post.params['gamma_j'])
-                    #print(post.list_vary_params())
-                    #print(post.get_vary_params())
                     
                 bic[i] = baseline_bic - post.likelihood.bic()
-
+                #print(baseline_bic, post.likelihood.bic(), bic[i])
 
                 if bic[i] < self.floor - 1:
+
                     # If the fit is bad, reset k_n+1 = 0 and try again.
                     for k in self.default_pdict.keys():
                         post.params[k].value = self.default_pdict[k]
                     post.params[perkey].value = per
+
                     post.params['k{}'.format(post.params.num_planets)].value = 0
                     post = radvel.fitting.maxlike_fitting(post, verbose=False)
                     bic[i] = baseline_bic - post.likelihood.bic()
+                        
                     
                     
                 if bic[i] < self.floor - 1:
+
                     # If the fit is still bad, reset tc to better value and try again.
                     for k in self.default_pdict.keys():
                         post.params[k].value = self.default_pdict[k]
+
+                        if "gamma" in k:
+                            post.params[k].vary = False
+
                     post.params[perkey].value = per # Judah add: change period from its default_pdict value. Otherwise, it always gets set to 100 days.
+                     
+                    post.params['k{}'.format(post.params.num_planets)].value = rms # Judah delete
+                    post.params['k{}'.format(post.params.num_planets)].vary = False                
                     veldiff = np.absolute(post.likelihood.y - np.median(post.likelihood.y))
                     tc_new = self.times[np.argmin(veldiff)]
                     post.params['tc{}'.format(post.params.num_planets)].value = tc_new
                     post = radvel.fitting.maxlike_fitting(post, verbose=False)
                     bic[i] = baseline_bic - post.likelihood.bic()
+
+
+                #print("BICCCC", bic1,  bic2, bic3, per) # See if all BICS are coming out the same
 
                 # Append the best-fit parameters to the period-iterated list.
                 best_params = {}
@@ -345,9 +422,9 @@ class Periodogram(object):
                 if self.verbose:
                     counter.value += 1
                     pbar.update_to(counter.value)
-            #print("BICCCC", len(bic), bic[:10]) # See if all BICS are coming out the same
-            return (bic, fit_params)
 
+            return (bic, fit_params)
+        
         if self.verbose:
             global pbar
             global counter
@@ -356,6 +433,8 @@ class Periodogram(object):
             pbar = TqdmUpTo(total=len(self.pers), position=0)
 
         if self.workers == 1:
+            #print("In periodogram", self.post.params.keys())
+            #sfsdfsd
             # Call the periodogram loop on one core.
             self.bic, self.fit_params = _fit_period(0)
 
@@ -376,16 +455,17 @@ class Periodogram(object):
             # Close the pool object.
             p.close()
 
-
+        #import pdb; pdb.set_trace()
         fit_index = np.argmax(self.bic)
         self.bestfit_params = self.fit_params[fit_index]
         self.best_bic = self.bic[fit_index]
         self.power['bic'] = self.bic
-        #print("The best bic", self.best_bic, self.bestfit_params)
 
-        #if self.workers == 1:
-         #   print("THE BEST", self.bestfit_params['per2'])
-          #  print("The best?", self.post.params['per2'].value)
+        self.ls()
+        ls_best_per_ind = np.argmax(np.flip(self.power['ls']))
+        self.ls_best_per = self.pers[ls_best_per_ind]
+        self.bic_best_per = self.pers[fit_index]
+
 
         if self.verbose:
             pbar.close()
@@ -396,7 +476,7 @@ class Periodogram(object):
 
         """
         # FOR TESTING
-        print("Calculating Lomb-Scargle periodogram")
+        #print("Calculating Lomb-Scargle periodogram")
         periodogram = astropy.stats.LombScargle(self.times, self.vel,
                                                 self.errvel)
         power = periodogram.power(np.flip(self.freqs))
@@ -410,27 +490,56 @@ class Periodogram(object):
             Modified version by JB Ruffio (2022-02-17) based on the integral of an exponential decay.
 
         """
+
         sBIC = np.sort(self.power['bic'])
-        #print(len(sBIC), np.min(sBIC), np.max(sBIC))
         crop_BIC = sBIC[int(0.5 * len(sBIC)):int(0.95 * len(sBIC))]
         med_BIC = crop_BIC[0]
+        #print(len(sBIC), np.min(sBIC), np.max(sBIC), len(crop_BIC))
+        #import pdb; pdb.set_trace()
 
         hist, edge = np.histogram(crop_BIC-med_BIC, bins=10)
-        #print("HISTTTT", hist)
-        #print("EDGE yaknow", edge)
-        #fsdfsd
         cent = (edge[1:] + edge[:-1]) / 2.
 
         loghist = np.log10(hist)
         a,b = np.polyfit(cent[np.isfinite(loghist)], loghist[np.isfinite(loghist)], 1)
+        #import pdb; pdb.set_trace()
 
-        #print("BICSS", crop_BIC, med_BIC)
-        #print(hist)
+        if a>0: # Judah: If the line is positively sloped, use the lower sBIC values and try again
+          #print("Found positive slopeeeeeeee")
+          crop_BIC = sBIC[int(0 * len(sBIC)):int(0.95 * len(sBIC))]
+          med_BIC = crop_BIC[0]
+          hist, edge = np.histogram(crop_BIC-med_BIC, bins=10)
+          cent = (edge[1:] + edge[:-1]) / 2.
+
+          if hist[-1]>hist[-2]:
+              hist = hist[:-1]
+              edge = edge[:-1]
+              cent = (edge[1:] + edge[:-1]) / 2.
+
+          loghist = np.log10(hist)
+          a,b = np.polyfit(cent[np.isfinite(loghist)], loghist[np.isfinite(loghist)], 1)
+          
+          xlab = "crop_BIC - min_BIC"
+
+        else:
+          xlab = "crop_BIC - med_BIC"
+
+
+        ## Another of Judahs ideas
+        # Leaving for now: sometimes interpolation doesn't go down to 0.001, causing error. Try 100x (crop_BIC-med_BIC)
+        #from scipy.interpolate import interp1d
+
+        #extrap_x = np.linspace((crop_BIC-med_BIC)[0], 10*(crop_BIC-med_BIC)[-1], 1000)
+        #extrap_y = np.e**(a*extrap_x+b) / len(crop_BIC)
+
+        #bic_from_fap = interp1d(extrap_y, extrap_x)
+        #judah_bic = bic_from_fap(0.001)+med_BIC
+
+        #self.bic_thresh = judah_bic
+
         
-        #plt.close()
-        #plt.hist(crop_BIC-med_BIC, bins=10)
-        #plt.savefig("hist.png")
-        #plt.close()
+
+    
         
         
         B=10**b
@@ -438,6 +547,48 @@ class Periodogram(object):
         #print("Boutta thresh", self.fap, self.num_pers, A, med_BIC)
         self.bic_thresh = np.log(self.fap / self.num_pers) / (-A)+med_BIC
         self.fap_min = np.exp(-A*(sBIC[-1]-med_BIC)) * self.num_pers
+        #print("BIC THresh and FAP", self.bic_thresh, self.fap_min)
+
+        #import pdb; pdb.set_trace()
+        #print("bic_thresh and judah bic: ", self.bic_thresh, judah_bic)
+        
+        # If a is still >0 after the catch above, then set manually. Put this statement after self.fap_min calculation so it gets calculated normally.
+        if a>0:
+          print("Uh oh, slope still positive. Setting self.bic_thresh=30")
+          self.bic_thresh = 30
+
+        # Judah: extra check on huge BIC thresholds. For T001694, most BIC values are ~-1e8 because they don't. This causes the BIC threshold to be +7e8.
+
+        #print("Thresh compare", self.bic_thresh)
+        #sdfsdfd
+        plott=False
+        if plott:
+            plt.close()
+            #hist, edge = np.histogram(crop_BIC-med_BIC, bins=10)
+            #cent = (edge[1:] + edge[:-1]) / 2.
+            #loghist = np.log10(hist)
+            w = (np.max(crop_BIC-med_BIC)-np.min(crop_BIC-med_BIC))/20
+
+            plt.bar(cent[np.isfinite(loghist)], loghist[np.isfinite(loghist)], width=w)
+
+
+            bic_grid = np.linspace(np.min(sBIC), 1*np.max(sBIC), 200) - med_BIC
+            plt.plot(bic_grid, a*bic_grid+b, c='red')
+            plt.xlabel(xlab)
+            plt.ylabel("log(N)")
+            plt.title('ΔBIC_threshold={:.2f}'.format(self.bic_thresh))
+            plt.savefig(self.starname+"_hist.png")
+            plt.close()
+
+            plt.plot(self.pers, self.power['bic'])
+            plt.xlabel("period (days)")
+            plt.ylabel("ΔBIC")
+            plt.title('ΔBIC_threshold={:.2f}'.format(self.bic_thresh))
+            
+            plt.savefig(self.starname+"_bic_periodogram.png")
+            #sdfsd
+            #import pdb; pdb.set_trace()
+
 
     def save_per(self, filename, ls=False):
         df = pd.DataFrame([])

@@ -11,6 +11,7 @@ import radvel
 from .periodogram import TqdmUpTo
 
 import rvsearch.utils
+from rvsearch import search
 
 
 class Injections(object):
@@ -36,7 +37,55 @@ class Injections(object):
         self.verbose = verbose
         self.beta_e = beta_e
 
-        self.search = pickle.load(open(searchpath, 'rb'))
+        #sub_trend = True
+
+        ## Judah idea to inject into residuals only.
+        use_resid=False
+        if use_resid:
+            original_search = pickle.load(open(searchpath, 'rb'))
+            data = original_search.data
+            data['mnvel'] = original_search.post.likelihood.residuals()
+            starname = original_search.starname
+            pmin, pmax = self.plim
+            mstar = original_search.mstar
+            mstar_err = original_search.mstar_err
+
+            if False:
+                import matplotlib.pyplot as plt
+                fig, ax = plt.subplots()
+                radvel.mtelplot(data.time, data.mnvel, data.errvel, data.tel, ax)
+                plt.show()
+                sfdf
+            
+            #import pdb; pdb.set_trace()
+            resid_search = search.Search(data, min_per=pmin, max_per=pmax, baseline=False,
+                                         sub_trend=False, trend=True, max_planets=8,
+                                         workers=125, mcmc=False, verbose=False, mstar=[mstar, mstar_err],
+                                         save_plots=False, eccentric=True)
+
+            resid_search.pers = original_search.pers
+            #import pdb; pdb.set_trace()
+
+            self.search = resid_search # Update self.search
+
+
+
+        else:
+            self.search = pickle.load(open(searchpath, 'rb'))
+
+
+
+        #self.search.polish = False # Judah experiment for speed.
+        # Judah: fix previously discovered planet params
+        #import pdb; pdb.set_trace()
+        self.search.params_init   = self.search.post.params
+        self.search.priors        = self.search.post.priors
+        self.search.setup_planets = self.search.post.params.num_planets
+        self.search.trend_and_planet_allowed = False ## For injections, disallow both trend and curve
+        self.search.trend_subtractor()
+
+
+
         self.search.verbose = False
         seed = np.round(self.search.data['time'].values[0] * 1000).astype(int)
 
@@ -44,6 +93,13 @@ class Injections(object):
         self.recoveries = self.injected_planets
 
         self.outdir = os.path.dirname(searchpath)
+
+        ## Save resid search so it can be loaded in run_injections()
+        self.searchpath = searchpath.replace("search.pkl", "resid_search.pkl")
+        pickle_out = open(self.searchpath,'wb')
+        pickle.dump(self.search, pickle_out)
+        pickle_out.close()
+
 
     def random_planets(self, seed):
         """Generate random planets
@@ -107,11 +163,16 @@ class Injections(object):
 
         """
 
+        #import pdb; pdb.set_trace()
+
         def _run_one(orbel):
             sfile = open(self.searchpath, 'rb')
             search = pickle.load(sfile)
             search.verbose = False
             sfile.close()
+            #search = self.search
+            #print("Plannssss", self.search.num_planets)
+            #sdfds
             recovered, recovered_orbel, trend_pref, trendel = search.inject_recover(orbel, num_cpus=1, full_grid=self.full_grid)
 
             last_bic = max(search.best_bics.keys())
@@ -130,7 +191,7 @@ class Injections(object):
         outdf = pd.DataFrame([], index=range(self.num_sim),
                              columns=outcols)
         outdf[self.injected_planets.columns] = self.injected_planets
-
+        
         in_orbels = []
         out_orbels = []
         recs = []
@@ -138,6 +199,7 @@ class Injections(object):
         threshes = []
         trend_prefs = []
         trendels = []
+
         for i, row in self.injected_planets.iterrows():
             in_orbels.append(list(row.values))
 
@@ -149,6 +211,7 @@ class Injections(object):
             pbar = TqdmUpTo(total=len(in_orbels), position=0)
 
         pool = mp.Pool(processes=num_cpus)
+        #import pdb; pdb.set_trace()
         outputs = pool.map(_run_one, in_orbels)
 
         for out in outputs:
@@ -193,7 +256,7 @@ class Completeness(object):
     """
 
     def __init__(self, recoveries, xcol='inj_au', ycol='inj_msini',
-                 mstar=None, rstar=None, teff=None, searches=None, trends_count=False):
+                 mstar=None, rstar=None, teff=None, searches=None):#, trends_count=False):
         """Object to handle a suite of injection/recovery tests
 
         Args:
@@ -234,7 +297,7 @@ class Completeness(object):
         self.grid = None
         self.interpolator = None
         
-        self.trends_count = trends_count
+        #self.trends_count = trends_count
 
     @classmethod
     def from_csv(cls, recovery_file, *args, **kwargs):
@@ -243,7 +306,7 @@ class Completeness(object):
 
         return cls(recoveries, *args, **kwargs)
 
-    def completeness_grid(self, xlim, ylim, resolution=30, xlogwin=0.5, ylogwin=0.5):
+    def completeness_grid(self, xlim, ylim, resolution=30, xlogwin=0.5, ylogwin=0.5, trends_count=False):
         """Calculate completeness on a fine grid
 
         Compute a 2D moving average in loglog space
@@ -266,8 +329,10 @@ class Completeness(object):
         xinj = self.recoveries[self.xcol]
         yinj = self.recoveries[self.ycol]
 
-        if self.trends_count:
-            good = self.recoveries[['recovered', 'trend_pref']].any(axis=1) # Is either one True?
+        # If trends_count, then ONLY trends count. Treat resolved as non-detections.
+        if trends_count:
+            #good = self.recoveries[['recovered', 'trend_pref']].any(axis=1) # Is either one True?
+            good = self.recoveries['trend_pref']
         else:
             good = self.recoveries['recovered']
 
@@ -292,7 +357,7 @@ class Completeness(object):
                                    (xinj[good] >= xlow) & (yinj[good] <= yhigh) &
                                    (yinj[good] >= ylow))[0]
                 # print(x, y, xlow, xhigh, ylow, yhigh, len(boxgood), len(boxall))
-                if len(boxall) > 10:
+                if len(boxall) > 5:
                     z[j, i] = float(len(boxgood))/len(boxall)
                     last = float(len(boxgood))/len(boxall)
                 else:

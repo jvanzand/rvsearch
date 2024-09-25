@@ -13,6 +13,7 @@ import rvsearch.utils as utils
 label_dict = {0:'b', 1:'c', 2:'d', 3:'e', 4:'f', 5:'g',
               6:'h', 7:'i', 8:'j', 9:'k', 10:'l', 11:'m'}
 
+
 class CustomTicker(LogFormatterSciNotation):
     def __call__(self, x, pos=None):
         if x not in [0.1, 1, 10, 100, 1000, 10000]:
@@ -495,6 +496,7 @@ class CompletenessPlots(object):
             self.searches = searches
         else:
             self.searches = [searches]
+        
 
         self.xlim = (min(completeness.recoveries[completeness.xcol]),
                      max(completeness.recoveries[completeness.xcol]))
@@ -502,12 +504,12 @@ class CompletenessPlots(object):
         self.ylim = (min(completeness.recoveries[completeness.ycol]),
                      max(completeness.recoveries[completeness.ycol]))
 
-        self.xgrid, self.ygrid, self.comp_array = completeness.completeness_grid(self.xlim, self.ylim)
+        self.xgrid, self.ygrid, self.comp_array = completeness.completeness_grid(self.xlim, self.ylim, trends_count=trends_count)
         
-        self.trends_count = trends_count
+
 
     def completeness_plot(self, title='', xlabel='', ylabel='',
-                          colorbar=True, hide_points=False):
+                          colorbar=True, hide_points=False, trends_count=False):
         """Plot completeness contours
 
         Args:
@@ -516,32 +518,31 @@ class CompletenessPlots(object):
             ylabel (string): (optional) y-axis label
             colorbar (bool): (optional) plot colorbar
             hide_points (bool): (optional) if true hide individual injection/recovery points
-            trends_count (bool): (optional) If true, injections recovered only as trends can count
+            trends_count (bool): (optional) If true, injections recovered only as trends also count
         """
-        # if self.trends_count==True:
-        #     good_cond = 'recovered == True | trend_pref == True'
-        #     bad_cond = 'recovered == False & trend_pref == False'
-        # else:
-        #     good_cond = 'recovered == True'
-        #     bad_cond = 'recovered == False'
         
-        if self.trends_count==True:
-            good_cond = 'recovered == True'
-            bad_cond = 'recovered == False & trend_pref == False'
-            trend_only_cond = 'recovered == False & trend_pref == True'
-            
+        # If trends_count, then ONLY trends count. Treat resolved as non-detections.
+        if trends_count==True:
+            good_cond = 'recovered == False & trend_pref == True'
+            bad_cond = '(recovered == True) or (recovered == False & trend_pref == False)'
+            #trend_only_cond = 'recovered == False & trend_pref == True'
+            good_color = "g."
             
         else:
             good_cond = 'recovered == True'
             bad_cond = 'recovered == False'
-            trend_only_cond = 'recovered == False & recovered == True' # Empty
+            #trend_only_cond = 'recovered == False & recovered == True' # Empty
+            good_color = "b."
             
         good = self.comp.recoveries.query(good_cond)
         bad = self.comp.recoveries.query(bad_cond)
-        trend_only = self.comp.recoveries.query(trend_only_cond)
+        #trend_only = self.comp.recoveries.query(trend_only_cond)
 
         fig = pl.figure(figsize=(7.5, 5.25))
         pl.subplots_adjust(bottom=0.18, left=0.22, right=0.95)
+
+
+        #import pdb; pdb.set_trace()
 
         ## Save completeness map
         np.save('xgrid', self.xgrid)
@@ -553,9 +554,9 @@ class CompletenessPlots(object):
         # Plot 50th percentile.
         fifty = pl.contour(self.xgrid, self.ygrid, self.comp_array, [0.5], c='black')
         if not hide_points:
-            pl.plot(good[self.comp.xcol], good[self.comp.ycol], 'b.', alpha=0.3, label='recovered')
+            pl.plot(good[self.comp.xcol], good[self.comp.ycol], good_color, alpha=0.3, label='recovered')
             pl.plot(bad[self.comp.xcol], bad[self.comp.ycol], 'r.', alpha=0.3, label='missed')
-            pl.plot(trend_only[self.comp.xcol], trend_only[self.comp.ycol], 'g.', alpha=0.3, label='trend')
+            #pl.plot(trend_only[self.comp.xcol], trend_only[self.comp.ycol], 'g.', alpha=0.3, label='trend')
         ax = pl.gca()
         ax.set_xscale('log')
         ax.set_yscale('log')
@@ -590,23 +591,34 @@ class CompletenessPlots(object):
         else:
             warnings.warn('Overplotting detections not implemented for the current axis selection: x={}, y={}'.format(self.comp.xcol, self.comp.ycol))
 
+        labelsize=18
+        ticksize=14
+
+        tick_formatter = lambda ticks: np.array(["{}".format(int(tick_val)) if tick_val%1 == 0 else "{:.1f}".format(tick_val) for tick_val in ticks])
+
         xticks = pl.xticks()[0]
-        pl.xticks(xticks, xticks)
+        pl.xticks(xticks, tick_formatter(xticks), fontsize=ticksize)
+
+        #import pdb; pdb.set_trace()
 
         yticks = pl.yticks()[0]
-        pl.yticks(yticks, yticks)
+        pl.yticks(yticks, tick_formatter(yticks), fontsize=ticksize)
 
         pl.xlim(self.xlim[0], self.xlim[1])
         pl.ylim(self.ylim[0], self.ylim[1])
 
-        pl.title(title)
-        pl.xlabel(xlabel)
-        pl.ylabel(ylabel)
+        fontsize = 18
+        pl.title(title, size=labelsize)
+        pl.xlabel(xlabel, size=labelsize)
+        pl.ylabel(ylabel, size=labelsize)
 
         pl.grid(True)
 
+
         if colorbar:
-            pl.colorbar(mappable=CS, pad=0, label='probability of detection')
+            cb = pl.colorbar(mappable=CS, pad=0)
+            cb.ax.set_ylabel('probability of detection', fontsize=labelsize)
+            cb.ax.tick_params(labelsize=ticksize)
 
         fig = pl.gcf()
 
