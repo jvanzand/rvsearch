@@ -509,7 +509,8 @@ class CompletenessPlots(object):
 
 
     def completeness_plot(self, title='', xlabel='', ylabel='',
-                          colorbar=True, hide_points=False, trends_count=False):
+                          colorbar=True, hide_points=False, trends_count=False, 
+                          save_grids=False):
         """Plot completeness contours
 
         Args:
@@ -519,6 +520,7 @@ class CompletenessPlots(object):
             colorbar (bool): (optional) plot colorbar
             hide_points (bool): (optional) if true hide individual injection/recovery points
             trends_count (bool): (optional) If true, injections recovered only as trends also count
+            y_unit (str): (optional) Either 'earth' or 'jupiter' to determine y units of cplt plot
         """
         
         # If trends_count, then ONLY trends count. Treat resolved as non-detections.
@@ -527,12 +529,25 @@ class CompletenessPlots(object):
             bad_cond = '(recovered == True) or (recovered == False & trend_pref == False)'
             #trend_only_cond = 'recovered == False & trend_pref == True'
             good_color = "g."
+
+            if save_grids:
+                ## Save completeness map
+                np.save('xgrid_trend', self.xgrid)
+                np.save('ygrid_trend', self.ygrid)
+                np.save('comp_array_trend', self.comp_array)
             
         else:
             good_cond = 'recovered == True'
             bad_cond = 'recovered == False'
             #trend_only_cond = 'recovered == False & recovered == True' # Empty
             good_color = "b."
+
+
+            if save_grids:
+                ## Save completeness map
+                np.save('xgrid_resolved', self.xgrid)
+                np.save('ygrid_resolved', self.ygrid)
+                np.save('comp_array_resolved', self.comp_array)
             
         good = self.comp.recoveries.query(good_cond)
         bad = self.comp.recoveries.query(bad_cond)
@@ -543,14 +558,10 @@ class CompletenessPlots(object):
 
 
         #import pdb; pdb.set_trace()
-
-        ## Save completeness map
-        np.save('xgrid', self.xgrid)
-        np.save('ygrid', self.ygrid)
-        np.save('comp_array', self.comp_array)
         
-            
-        CS = pl.contourf(self.xgrid, self.ygrid, self.comp_array, 10, cmap=pl.cm.Reds_r, vmax=0.9)
+
+        CS = pl.contourf(self.xgrid, self.ygrid, self.comp_array, 10, cmap=pl.cm.Reds_r, vmin=0, vmax=0.9)
+
         # Plot 50th percentile.
         fifty = pl.contour(self.xgrid, self.ygrid, self.comp_array, [0.5], c='black')
         if not hide_points:
@@ -560,7 +571,9 @@ class CompletenessPlots(object):
         ax = pl.gca()
         ax.set_xscale('log')
         ax.set_yscale('log')
+        #import pdb; pdb.set_trace()
 
+        ## Code for plotting real detected planets as black dots
         if self.comp.xcol == 'inj_au' and self.comp.ycol == 'inj_msini' and self.searches[0] is not None:
             for search in self.searches:
                 post = search.post

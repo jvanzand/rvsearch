@@ -79,8 +79,10 @@ class Search(object):
         else:
             self.basebic = post.likelihood.bic()
 
+        self.setup_path = setup_path
+        #import pdb; pdb.set_trace()
         if post == None:
-
+            #import pdb; pdb.set_trace()
             ## Judah addition so RVSearch can accept setup files
             if setup_path is not None:
 
@@ -94,11 +96,9 @@ class Search(object):
                 self.starname = P.starname
                 self.time_base = P.time_base
                 self.setup_planets = post.params.num_planets
-                self.params_init = post.params
                 #import pdb; pdb.set_trace()
+                self.params_init = post.params
                 
-
-
             else:
                 self.priors = priors
                 self.params = utils.initialize_default_pars(instnames=self.tels,
@@ -112,6 +112,7 @@ class Search(object):
                 self.setup_name = None
                 self.setup_planets = -1
                 self.time_base = None
+                #import pdb; pdb.set_trace()
 
         else:
             #self.post          = post
@@ -178,18 +179,40 @@ class Search(object):
         """Perform zero-planet baseline fit, test for significant trend.
 
         """
-       
+        #import pdb; pdb.set_trace()
         post1 = copy.deepcopy(self.post)
+        #post1.likelihood = copy.deepcopy(self.post.likelihood)
+        
+        #import pdb; pdb.set_trace()
         # Fix all Keplerian parameters. K is zero, equivalent to no planet.
-        post1.params['k1'].vary      = False
-        post1.params['tc1'].vary     = False
-        post1.params['per1'].vary    = False
-        post1.params['secosw1'].vary = False
-        post1.params['sesinw1'].vary = False
+        for param_type in ['k', 'tc', 'per', 'secosw', 'sesinw']:
+            for ind in range(8):
+                param = param_type+f'{ind}'
+                if param in post1.list_params():
+                    post1.params[param].vary = False
+                    #post1.likelihood.params[param].vary = False
+                else:
+                    ## Weird issue where likelihood has extra params. Delete them
+                    #if param in post1.likelihood.list_params():
+                        #post1.likelihood.params.pop(param)
+                        
+                        #param_ind = post1.likelihood.params_order.index(param)
+                        #post1.likelihood.params_order.pop(param_ind) # Need integer index to pop list item
+                    continue
+                    
+                
+        #import pdb; pdb.set_trace()
+        #post1.params['k1'].vary      = False
+        #post1.params['tc1'].vary     = False
+        #post1.params['per1'].vary    = False
+        #post1.params['secosw1'].vary = False
+        #post1.params['sesinw1'].vary = False
         post1.params['dvdt'].vary    = True
         post1.params['curv'].vary    = True
 
+        #import pdb; pdb.set_trace()
         post1 = radvel.fitting.maxlike_fitting(post1, verbose=False)
+
 
         trend_curve_bic = post1.likelihood.bic()
 
@@ -211,7 +234,18 @@ class Search(object):
 
         flat_bic = post3.likelihood.bic()
         #import pdb; pdb.set_trace()
-        #print("trend bics", flat_bic, trend_bic, trend_curve_bic)#, self.data.mnvel.iloc[0])
+        
+        #### Temporary plotting ####
+        #import matplotlib.pyplot as plt
+        #plt.scatter(self.post.likelihood.x, self.post.likelihood.y)
+        #for pp in [post1, post2, post3]:
+        #    dvdt = pp.params['dvdt'].value
+        #    yplot = dvdt*(self.post.likelihood.x-np.median(self.post.likelihood.x)) + pp.params['gamma_j'].value
+        #    plt.plot(self.post.likelihood.x, yplot)
+        #plt.savefig('wonder.jpg')
+        #import pdb; pdb.set_trace()
+        ########
+        print("trend bics", flat_bic, trend_bic, trend_curve_bic)#, self.data.mnvel.iloc[0])
         #print("trend bics", flat_bic, post3.params['dvdt'].value)
         #flat_bic = -100000000
         if (trend_bic < flat_bic - 5) or (trend_curve_bic < flat_bic - 5):
@@ -866,20 +900,14 @@ class Search(object):
                self.post.params[key].vary = True
 
         #import pdb; pdb.set_trace()
-        
  
         if self.trend:
             self.trend_test()
 
         run = True
-
-
-        #print("Min period", self.min_per)
-
-        
         while run:
 
-            ## Judah: put this check before search to avoid unnecessary search
+            ## Judah: put this check before search to avoid unnecessary searches
             if self.num_planets >= self.max_planets:
                 run = False
 
@@ -910,7 +938,7 @@ class Search(object):
                                                verbose=self.verbose,
                                                starname=self.starname)
  
-
+            #import pdb; pdb.set_trace()
             perioder.per_bic()
 
             
@@ -919,6 +947,7 @@ class Search(object):
             #import pdb; pdb.set_trace()
 
             self.periodograms[self.num_planets] = perioder.power[self.crit]
+            #import pdb; pdb.set_trace()
             if self.num_planets == 0 or self.pers is None:
                 self.pers = perioder.pers
             
@@ -953,11 +982,6 @@ class Search(object):
                                      self.num_planets+1))
 
             # Check whether there is a detection. If so, fit free and proceed.
-            ## Judah experiment: allow pass if best_bic is within 0.1% of threshold
-            #within_1percent = (abs(perioder.best_bic-perioder.bic_thresh)<0.001*perioder.bic_thresh)
-            #if (perioder.best_bic < perioder.bic_thresh) and within_1percent:
-             #   print("1 PERCENTER", perioder.bic_thresh, perioder.best_bic, self.bic_best_per)
-            #if (perioder.best_bic > perioder.bic_thresh) or within_1percent:
             if perioder.best_bic > perioder.bic_thresh:
                 self.num_planets += 1
                 for k in self.post.params.keys():
@@ -1169,6 +1193,7 @@ class Search(object):
             synthquants = synthchains.quantile([0.159, 0.5, 0.841])
 
             # Compress, thin, and save chains, in fitting and synthetic bases.
+            #import pdb; pdb.set_trace()
             csvfn = outdir + '/chains.csv.tar.bz2'
             synthchains.to_csv(csvfn, compression='bz2')
 
@@ -1233,15 +1258,23 @@ class Search(object):
         #import pdb; pdb.set_trace()
 
         if self.save_outputs:
-            chain_path = outdir + '/chains.csv.tar.bz2'
-            synthchains = pd.read_csv(chain_path)
-            #import pdb; pdb.set_trace()
-
-            ## Use RVSearch's derive function to add derived parameters to posterior
-            if self.mstar is not None:
-                self.post, synthchains = utils.derive(self.post, synthchains, self.mstar, self.mstar_err)
-
+        
+            ## Define post path to save files
             post_path = os.path.join(outdir, "post_final.pkl")
+        
+            ## Try loading MCMC products. If none were saved 
+            ## (eg, if no planets/trends were found), skip this step
+            try:
+                chain_path = outdir + '/chains.csv.tar.bz2' # Load MCMC chains
+                synthchains = pd.read_csv(chain_path)
+                #import pdb; pdb.set_trace()
+
+                ## Use RVSearch's derive function to add derived parameters to posterior
+                if self.mstar is not None:
+                    self.post, synthchains = utils.derive(self.post, synthchains, self.mstar, self.mstar_err)
+
+            except:
+                pass
             
             # Judah addition: save summary csv (code taken from radvel.driver.mcmc())
             if (self.num_planets != 0 or self.post.params['dvdt'].vary == True):
@@ -1259,7 +1292,7 @@ class Search(object):
                     statfile = os.path.join(outdir, '{}_radvel.stat'.format(self.setup_name))
                     status = driver.load_status(statfile)
 
-                    setup_path = "/home/judahvz/my_papers/trends_paper/rv/rv_data/{}/{}.py".format(self.starname, self.setup_name)
+                    setup_path = self.setup_path#"/home/judahvz/my_papers/trends_paper/rv/rv_data/{}/{}.py".format(self.starname, self.setup_name)
                     
                     chain_path = os.path.join(outdir, "chains.csv.tar.bz2")
                     autocorr = os.path.join(outdir, self.setup_name+"_autocorr.csv")
@@ -1292,90 +1325,8 @@ class Search(object):
 
 
                     # Judah: Use radvel's derive functions to save derived params in stat file
-                    
 
                     status = driver.load_status(statfile)
-                    """
-                    try:
-                        mstar = np.random.normal(
-                                     loc=P.stellar['mstar'], scale=P.stellar['mstar_err'],
-                                     size=len(chains)
-                                                 )
-                    except AttributeError:
-                        print("Mstar not provided in radvel setup file. Trying value passed to RVSearch.")
-                        if self.mstar is not None:
-                            mstar = np.random.normal(
-                                     loc=self.mstar[0], scale=self.mstar[1],
-                                     size=len(chains)
-                                                 )
-                        else:
-                             raise Exception("Err: Must provide a stellar mass")
-                             
-
-
-                    if (self.mstar <= 0.0).any():
-                        num_nan = np.sum(self.mstar <= 0.0)
-                        nan_perc = float(num_nan) / len(chains)
-                        mstar[mstar <= 0] = np.abs(mstar[mstar <= 0])
-                        print("WARNING: {} ({:.2f} %) of Msini samples are NaN. The stellar mass posterior may contain negative \
-values. Interpret posterior with caution.".format(num_nan, nan_perc))
-
-
-                    synthchains = post.params.basis.to_synth(synthchains)
-
-                    savestate = {'run': True}
-                    
-                    outcols = []
-                    for i in np.arange(1, P.nplanets + 1, 1):
-                        # Grab parameters from the chain
-                        def _has_col(key):
-                            cols = list(synthchains.columns)
-                            return cols.count('{}{}'.format(key, i)) == 1
-
-                        def _get_param(key):
-                            if _has_col(key):
-                                return synthchains['{}{}'.format(key, i)]
-                            else:
-                                return P.params['{}{}'.format(key, i)].value
-
-                        def _set_param(key, value):
-                            chains['{}{}'.format(key, i)] = value
-
-                        def _get_colname(key):
-                            return '{}{}'.format(key, i)
-
-                        per = _get_param('per')
-                        k = _get_param('k')
-                        e = _get_param('e')
-                        #import pdb; pdb.set_trace()
-                        mpsini = radvel.utils.Msini(k, per, mstar, e, Msini_units='earth')
-                        _set_param('mpsini', mpsini)
-                        outcols.append(_get_colname('mpsini'))
-
-                        mtotal = mstar + (mpsini * c.M_earth.value) / c.M_sun.value   # get total star plus planet mass
-                        a = radvel.utils.semi_major_axis(per, mtotal)         # changed from mstar to mtotal
-        
-                        _set_param('a', a)
-                        outcols.append(_get_colname('a'))
-
-                        musini = (mpsini * c.M_earth.value) / (mstar * c.M_sun.value)
-                        _set_param('musini', musini)
-                        outcols.append(_get_colname('musini'))
-
-                        try:
-                            rp = np.random.normal(
-                                loc=P.planet['rp{}'.format(i)],
-                                scale=P.planet['rp_err{}'.format(i)],
-                                size=len(chains)
-                            )
-
-                            _set_param('rp', rp)
-                            _set_param('rhop', radvel.utils.density(mpsini, rp))
-
-                            outcols.append(_get_colname('rhop'))
-                        except (AttributeError, KeyError):
-                            pass
-                    """
 
                     ########
                     savestate = {'run': True}
@@ -1415,8 +1366,6 @@ values. Interpret posterior with caution.".format(num_nan, nan_perc))
 
                     ## Load statfile to update status
                     status = driver.load_status(statfile)
-
-
 
                     #############################################################
                     # Make corner and multipanel plots. Do this AFTER getting derived params
@@ -1473,7 +1422,7 @@ values. Interpret posterior with caution.".format(num_nan, nan_perc))
                         print("WARNING: No model comparison performed.")
                         compstats = None
 
-                    ## Judah: not sure why, but I have to delete some (any?) columns to avoid an error in compiling the report. Removing hte _derived columns removes no vital info from the reports.
+                    ## Judah: not sure why, but I have to delete some (any?) columns to avoid an error in compiling the report. Removing the _derived columns removes no vital info from the reports.
                     delete_cols = [par for par in synthchains if "_derived" in par]
                     synthchains = synthchains.drop(columns=delete_cols)
 
@@ -1504,7 +1453,7 @@ values. Interpret posterior with caution.".format(num_nan, nan_perc))
                             rfile, depfiles=report_depfiles, latex_compiler="pdflatex"
                         )
 
-
+            #import pdb; pdb.set_trace()
             self.save(filename=post_path) # Write post to this file
 
             pickle_out = open(outdir+'/search.pkl','wb')
@@ -1533,6 +1482,7 @@ values. Interpret posterior with caution.".format(num_nan, nan_perc))
         Args:
             fixed_threshold (bool): fix the BIC threshold at the last threshold, or re-derive for each periodogram
         """
+        #import pdb; pdb.set_trace()
         if self.num_planets == 0:
             self.add_planet()
 
@@ -1546,10 +1496,23 @@ values. Interpret posterior with caution.".format(num_nan, nan_perc))
             thresh = None
 
         #print("THRESH in continue_search", thresh)
-
+        #import pdb; pdb.set_trace()
         ## Judah addition. Move to specified basis to fix params. Stay in that basis for run_search()
-        self.post.params.basis.to_any_basis(self.post.params, "per tc secosw sesinw k")
+        srch_basis_params = self.post.params.basis.to_any_basis(self.post.params, "per tc secosw sesinw k")
+        #self.post.params.update(srch_basis_params)
+        #self.post.params['sesinw1'].vary = False
+        #self.post.params['secosw1'].vary = False
 
+        
+        ## Another addition: if any of the new params are missing from self.post, add them with vary=False
+        ## Idea is that all params from the new basis should be in the post. Set vary=False to avoid having to list_vary_params() etc. 
+        #import pdb; pdb.set_trace()
+        for param_key in srch_basis_params.keys():
+            #print("search.py line~1600: Manually adding params to post to match likelihood. Not thoroughly tested")
+            if param_key not in self.post.params.keys():
+                self.post.params[param_key] = srch_basis_params[param_key]
+                self.post.params[param_key].vary = False
+        
         # Fix parameters of all known planets.
         if self.num_planets != 0:
             for n in np.arange(self.num_planets):
@@ -1565,8 +1528,11 @@ values. Interpret posterior with caution.".format(num_nan, nan_perc))
                 self.post.likelihood.params['k{}'.format(n+1)].vary      = False
                 self.post.likelihood.params['secosw{}'.format(n+1)].vary = False
                 self.post.likelihood.params['sesinw{}'.format(n+1)].vary = False
+        #else: # I think num_planets==0 causes an issue. Handle here
+                
         
-
+        
+        #import pdb; pdb.set_trace()
         #print("Params in continue_search", *[self.post.params["per{}".format(p+1)] for p in range(self.post.params.num_planets)], sep="\n")
         self.run_search(fixed_threshold=thresh, mkoutdir=False, running=running)
         #print("BIC at the end of continue_search", self.post.bic())
@@ -1605,16 +1571,17 @@ values. Interpret posterior with caution.".format(num_nan, nan_perc))
             # These are the pers to search over, not to inject over (those are in the inject object)
             min_per=np.min(self.pers)
             max_per=np.max(self.pers)
-            man_grid_len = int(max(len(self.pers)/4, 50))
+            man_grid_len = int(max(len(self.pers)/4, 50)) # At least 50 periods
+            man_grid_len = int(min(man_grid_len, 200)) # At most 200 periods
             # Equal frequency spacing:
             self.manual_grid = 1/np.linspace(1/min_per, 1/max_per, man_grid_len)
             
-
+        #import pdb; pdb.set_trace()
 
         ## Judah addition: make sure we're in synthesis basis before generating model RVs.
-        self.post.params.basis.to_any_basis(self.post.params, "per tp e w k")
+        synth_basis_params = self.post.params.basis.to_any_basis(self.post.params, "per tp e w k")
         mod = radvel.kepler.rv_drive(self.data['time'].values, injected_orbel)
-        
+        #import pdb; pdb.set_trace()
 
         pltt = False
         if pltt:
@@ -1640,7 +1607,7 @@ values. Interpret posterior with caution.".format(num_nan, nan_perc))
 
 
         self.data['mnvel'] += mod
-
+        #import pdb; pdb.set_trace()
         self.post = utils.initialize_post(self.data, self.post.params, self.post.priors, time_base=self.time_base) # Judah addition to include updated data in post. Might be redundant with add_planet() lines, but seems to make a difference.
 
         if pltt:
@@ -1712,12 +1679,12 @@ values. Interpret posterior with caution.".format(num_nan, nan_perc))
         
         # Separately check if system has recovered trend
         if self.trend:
-            self.trend_pref = False # If I set to False here, do I need to set in in trend_test()?
+            self.trend_pref = False # If I set to False here, do I need to set in trend_test()?
             dvdt = self.post.params['dvdt'].value
             curv = self.post.params['curv'].value
 
-            trend_floor = 8/(3*365.25) # 8 m/s RV variation over 3 years is a 4sigma detection (~2m/s errors)
-            curv_floor = 8/(3*365.25)**2
+            trend_floor = 30/(45*365.25) # 30 m/s RV variation over GCep's 45-year baseline should be detectable
+            curv_floor = 30/(45*365.25)**2
    
             bic_condition = self.trend_bic_diff < -30 # Did trend win over flat by 30?
 

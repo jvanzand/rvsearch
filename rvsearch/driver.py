@@ -76,7 +76,7 @@ def injections(args):
 
     rstar = args.rstar
     teff  = args.teff
-
+    #import pdb; pdb.set_trace()
     sdir = args.search_dir
 
     with working_directory(sdir):
@@ -97,6 +97,7 @@ def injections(args):
                                                  full_grid=args.full_grid,
                                                  verbose=args.verbose,
                                                  beta_e=beta_e)
+                #import pdb; pdb.set_trace()
                 recoveries = inj.run_injections(num_cpus=args.num_cpus)
                 inj.save()
             except IOError as err:
@@ -135,10 +136,23 @@ def plots(args):
                     print("No recovery file found in {}".format(sdir))
                     os._exit(1)
 
-                xcol = 'inj_au'
-                ycol = 'inj_msini'
-                xlabel = '$a$ [AU]'
-                ylabel = r'M$\sin{i_p}$ [M$_\oplus$]'
+                xcol = args.xcol
+                ycol = args.ycol
+                
+                if xcol=='inj_au' and ycol=='inj_msini':
+                    xlabel='$a$ [AU]'
+                    if args.y_unit=='earth':
+                        ylabel = r'M$\sin{i_p}$ [M$_\oplus$]'
+                    elif args.y_unit=='jupiter':
+                        ylabel = r'M$\sin{i_p}$ [M$_{\mathrm{Jup}}$]'
+                    save_suffix = 'aMsini'
+                elif xcol=='inj_period' and ycol=='inj_k':
+                    xlabel = 'Period [d]'
+                    ylabel = 'K [m/s]'
+                    save_suffix = 'PerK'
+                else:
+                    raise Exception("Error: for completeness plots, must choose either inj_msini vs. inj_au OR inj_k vs. inj_period")
+                    
                 print("Plotting {} vs. {}".format(ycol, xcol))
 
                 mstar = searcher.mstar
@@ -146,25 +160,25 @@ def plots(args):
                 #import pdb; pdb.set_trace()
                 ## Resolved map
                 comp1 = rvsearch.Completeness.from_csv(rfile, xcol=xcol,
-                                                      ycol=ycol, mstar=mstar)
+                                                      ycol=ycol, mstar=mstar, y_unit=args.y_unit)
                 cplt1 = rvsearch.plots.CompletenessPlots(comp1, searches=[searcher], trends_count=False)
 
                 fig1 = cplt1.completeness_plot(title=run_name,
                                              xlabel=xlabel,
                                              ylabel=ylabel, trends_count=False)
-                saveto1 = os.path.join(run_name+'_recoveries.{}'.format(args.fmt))
+                saveto1 = os.path.join(run_name+'_recoveries_{}.{}'.format(save_suffix, args.fmt))
                 fig1.savefig(saveto1, dpi=200, bbox_inches='tight')
 
                 ## Trend map
                 comp2 = rvsearch.Completeness.from_csv(rfile, xcol=xcol,
-                                                      ycol=ycol, mstar=mstar)
+                                                      ycol=ycol, mstar=mstar, y_unit=args.y_unit)
                 cplt2 = rvsearch.plots.CompletenessPlots(comp2, searches=[searcher], trends_count=True)
 
                 fig2 = cplt2.completeness_plot(title=run_name,
                                              xlabel=xlabel,
                                              ylabel=ylabel,
                                              trends_count=True)
-                saveto2 = os.path.join(run_name+'_recoveries_trends.{}'.format(args.fmt))
+                saveto2 = os.path.join(run_name+'_recoveries_trends{}.{}'.format(save_suffix, args.fmt))
                 fig2.savefig(saveto2, dpi=200, bbox_inches='tight')
 
 

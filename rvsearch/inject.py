@@ -27,7 +27,7 @@ class Injections(object):
         verbose (bool): show progress bar
     """
 
-    def __init__(self, searchpath, plim, klim, elim, num_sim=1, full_grid=True, verbose=True, beta_e=False):
+    def __init__(self, searchpath, plim, klim, elim, num_sim=1, full_grid=True, verbose=True, beta_e=True):
         self.searchpath = searchpath
         self.plim = plim
         self.klim = klim
@@ -72,6 +72,7 @@ class Injections(object):
 
         else:
             self.search = pickle.load(open(searchpath, 'rb'))
+            #import pdb; pdb.set_trace()
 
 
 
@@ -95,10 +96,10 @@ class Injections(object):
         self.outdir = os.path.dirname(searchpath)
 
         ## Save resid search so it can be loaded in run_injections()
-        self.searchpath = searchpath.replace("search.pkl", "resid_search.pkl")
-        pickle_out = open(self.searchpath,'wb')
-        pickle.dump(self.search, pickle_out)
-        pickle_out.close()
+        #self.searchpath = searchpath.replace("search.pkl", "resid_search.pkl")
+        #pickle_out = open(self.searchpath,'wb')
+        #pickle.dump(self.search, pickle_out)
+        #pickle_out.close()
 
 
     def random_planets(self, seed):
@@ -166,6 +167,10 @@ class Injections(object):
         #import pdb; pdb.set_trace()
 
         def _run_one(orbel):
+            #if orbel[0]<3674.128 or orbel[0]>3674.130:
+            #    print('HEY')
+            #    return np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
+            
             sfile = open(self.searchpath, 'rb')
             search = pickle.load(sfile)
             search.verbose = False
@@ -173,6 +178,7 @@ class Injections(object):
             #search = self.search
             #print("Plannssss", self.search.num_planets)
             #sdfds
+            #import pdb; pdb.set_trace()
             recovered, recovered_orbel, trend_pref, trendel = search.inject_recover(orbel, num_cpus=1, full_grid=self.full_grid)
 
             last_bic = max(search.best_bics.keys())
@@ -211,9 +217,16 @@ class Injections(object):
             pbar = TqdmUpTo(total=len(in_orbels), position=0)
 
         pool = mp.Pool(processes=num_cpus)
+        ##import pdb; pdb.set_trace()
+        ##_run_one(in_orbels[8])
+        
+        outputs = pool.map(_run_one, in_orbels) # Bring this back!!
+        #outputs = []
+        #for j in range(len(in_orbels)):
+        #    in_orbel = in_orbels[j]
+        #    output = _run_one(in_orbel)
+        #    outputs.append(output)
         #import pdb; pdb.set_trace()
-        outputs = pool.map(_run_one, in_orbels)
-
         for out in outputs:
             recovered, recovered_orbel, bic, thresh, trend_pref, trendel = out
             out_orbels.append(recovered_orbel)
@@ -256,7 +269,7 @@ class Completeness(object):
     """
 
     def __init__(self, recoveries, xcol='inj_au', ycol='inj_msini',
-                 mstar=None, rstar=None, teff=None, searches=None):#, trends_count=False):
+                 mstar=None, rstar=None, teff=None, searches=None, y_unit='earth'):#, trends_count=False):
         """Object to handle a suite of injection/recovery tests
 
         Args:
@@ -272,14 +285,17 @@ class Completeness(object):
         self.searches = searches
 
         if mstar is not None:
-            self.mstar = np.zeros_like(self.recoveries['inj_period']) + mstar
+
+            self.mstar = np.zeros_like(self.recoveries['inj_period']) + mstar  
 
             self.recoveries['inj_msini'] = radvel.utils.Msini(self.recoveries['inj_k'],
                                                               self.recoveries['inj_period'],
-                                                              self.mstar, self.recoveries['inj_e'])
+                                                              self.mstar, self.recoveries['inj_e'],
+                                                              Msini_units=y_unit)
             self.recoveries['rec_msini'] = radvel.utils.Msini(self.recoveries['rec_k'],
                                                               self.recoveries['rec_period'],
-                                                              self.mstar, self.recoveries['rec_e'])
+                                                              self.mstar, self.recoveries['rec_e'],
+                                                              Msini_units=y_unit)
 
             self.recoveries['inj_au'] = radvel.utils.semi_major_axis(self.recoveries['inj_period'], mstar)
             self.recoveries['rec_au'] = radvel.utils.semi_major_axis(self.recoveries['rec_period'], mstar)
@@ -303,6 +319,7 @@ class Completeness(object):
     def from_csv(cls, recovery_file, *args, **kwargs):
         """Read recoveries and create Completeness object"""
         recoveries = pd.read_csv(recovery_file)
+        
 
         return cls(recoveries, *args, **kwargs)
 

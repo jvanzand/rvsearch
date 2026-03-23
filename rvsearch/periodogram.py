@@ -65,7 +65,7 @@ class Periodogram(object):
             self.default_pdict[k] = self.post.params[k].value
 
         self.basebic = basebic
-        self.num_known_planets = self.post.params.num_planets - 1
+        self.num_known_planets = np.max([0, self.post.params.num_planets - 1]) # Npl can't go below 0
 
         self.times = self.post.likelihood.x
         self.vel = self.post.likelihood.y
@@ -113,6 +113,7 @@ class Periodogram(object):
 
         # Automatically generate a period grid upon initialization.
         self.make_per_grid()
+
 
     def per_spacing(self):
         """Get the number of sampled frequencies and return a period grid.
@@ -162,7 +163,7 @@ class Periodogram(object):
         """Compute delta-BIC periodogram. ADD: crit is BIC or AIC.
 
         """
-
+        #import pdb; pdb.set_trace()
         prvstr = str(self.post.params.num_planets-1)
         plstr = str(self.post.params.num_planets)
         
@@ -181,6 +182,7 @@ class Periodogram(object):
                 self.post.params['secosw'+plstr].vary = False
                 self.post.params['sesinw'+plstr].vary = False
                 # Vary ONLY gamma, jitter, dvdt, curv. All else fixed, and k=0
+                #import pdb; pdb.set_trace()
                 baseline_fit = radvel.fitting.maxlike_fitting(self.post, verbose=False)
                 baseline_bic = baseline_fit.likelihood.bic()
 
@@ -195,7 +197,7 @@ class Periodogram(object):
 
         else:
             baseline_bic = self.basebic
-
+        #import pdb; pdb.set_trace()
         rms = np.std(self.post.likelihood.residuals())
         self.default_pdict['k{}'.format(self.post.params.num_planets)] = rms
 
@@ -222,6 +224,7 @@ class Periodogram(object):
         #print("YEEEER", self.pers)
         #sdfd
         #import pdb; pdb.set_trace()
+        import os # Judah delete
 
 
         single_use = False
@@ -253,7 +256,7 @@ class Periodogram(object):
             model_x = np.linspace(np.min(data_x), np.max(data_x), 600)
             model_y = post.likelihood.model(model_x) + post.params['gamma_j'].value
             #model_y = post.likelihood.model(post.likelihood.x) + post.params['gamma_j'].value
-            import matplotlib.pyplot as plt
+            #import matplotlib.pyplot as plt
             plt.close()
                    
             plt.scatter(data_x, data_y, c='r', label='data')
@@ -285,20 +288,27 @@ class Periodogram(object):
         
         # Define a function to compute periodogram for a given grid section.
         def _fit_period(n):
-            post = copy.deepcopy(self.post)
+            #post = copy.deepcopy(self.post) # Judah put this back
+            #import pdb; pdb.set_trace()
             per_array = self.sub_pers[n]
             fit_params = [{} for x in range(len(per_array))]
             bic = np.zeros_like(per_array)
+            #bic_which_list = [] # Judah delete
 
             
 
             ## Judah addition: let offsets float to avoid analytic value in radvel.likelihood.residuals
-            for p in post.params.keys():
-                if "gamma" in p:
-                    post.params[p].vary = True
+            #for p in post.params.keys():
+            #    if "gamma" in p:
+            #        post.params[p].vary = True
 
             
             for i, per in enumerate(per_array):
+                post = copy.deepcopy(self.post) # Judah delete
+                ## Judah addition: let offsets float to avoid analytic value in radvel.likelihood.residuals
+                for p in post.params.keys():
+                    if "gamma" in p:
+                        post.params[p].vary = True
 
                 
                 # Reset posterior parameters to default values.
@@ -315,10 +325,33 @@ class Periodogram(object):
                 perkey = 'per{}'.format(self.num_known_planets+1)
                 post.params[perkey].value = per
  
-
+                #dont_skip_cond = False
+                #dont_skip_cond = 3677<per<3679
+                #dont_skip_cond = 3500<per<3875
+                #dont_skip_cond = 3000<per<5000
+                #dont_skip_cond = 3000<per<40000
+                #dont_skip_cond = 2500<per<40000
+                #dont_skip_cond = 2446<per<40000
+                
+                #dont_skip_cond = 2500<per<3900
+                
+                #dont_skip_cond = (2446<per<30000) | (per<2445) # DIDN'T WORK
+                #dont_skip_cond = (2446<per<40000) | (per<2445) # DIDN'T WORK
+                #dont_skip_cond = 2400<per<40000 ## DIDN'T WORK
+                #dont_skip_cond = 2300<per<40000 ## DIDN'T WORK
+                #dont_skip_cond = 2200<per<40000 ## DIDN'T WORK
+                #dont_skip_cond = 2000<per<40000 ## DIDN'T WORK
+                #if not dont_skip_cond:
+                #    bic[i] = np.nan
+                #    fit_params[i] = post.params
+                #    bic_which_list.append(np.nan)
+                #    continue
+                #print("PRINTING PARAMS for best per BEFORE fit", self.workers)
+                #print(post)
+                    
                 plott=False
                 if plott:
-                    if 107<per<108:
+                    if 3677<per<3679:
                         print("Pre-Paramssss", post.params['k1'].value, post.params['k1'].vary, post.params['k2'].value, post.params['k2'].vary)
 
 
@@ -347,9 +380,9 @@ class Periodogram(object):
 
                 post = radvel.fitting.maxlike_fitting(post, verbose=False)
 
-                #print(self.pers)
+                #print("Periods", self.pers)
                 if plott:
-                    if 107<per<108:
+                    if 3677<per<3679:
                         #print("Post-params", post.params['k2'], post.params['dvdt'], post.params['curv'])
                         print("Post-Paramssss", post.params['k1'].value, post.params['k1'].vary, post.params['k2'].value, post.params['k2'].vary)
                         #print("Post-Paramssss", post.params['per1'].value, post.params['k1'].value, post.params['k1'].vary)
@@ -374,9 +407,16 @@ class Periodogram(object):
                         print("THE single BIC", baseline_bic, post.likelihood.bic(), baseline_bic-post.likelihood.bic())
                         #sdfsdfs
 
-                    
+                
                 bic[i] = baseline_bic - post.likelihood.bic()
+                
+                
+                #bic1, bic2, bic3 = np.nan, np.nan, np.nan
+                #bic1 = bic[i]
                 #print(baseline_bic, post.likelihood.bic(), bic[i])
+                #bic_which = 'first'
+                #if dont_skip_cond:
+                #    print('per, worker, and BIC 1: {:.2f}'.format(per), os.getpid(), bic[i])
 
                 if bic[i] < self.floor - 1:
 
@@ -388,6 +428,13 @@ class Periodogram(object):
                     post.params['k{}'.format(post.params.num_planets)].value = 0
                     post = radvel.fitting.maxlike_fitting(post, verbose=False)
                     bic[i] = baseline_bic - post.likelihood.bic()
+                    
+                    
+                    #print('Baseline, lik, per', baseline_bic, post.likelihood.bic())
+                    #bic2 = bic[i]
+                    #if dont_skip_cond:
+                    #    print('per, worker, and BIC 2: {:.2f}'.format(per), os.getpid(), bic[i])
+                    #bic_which='second'
                         
                     
                     
@@ -409,9 +456,15 @@ class Periodogram(object):
                     post.params['tc{}'.format(post.params.num_planets)].value = tc_new
                     post = radvel.fitting.maxlike_fitting(post, verbose=False)
                     bic[i] = baseline_bic - post.likelihood.bic()
+                    
+                    #bic3 = bic[i]
+                    #bic_which='third'
+                    #if dont_skip_cond:
+                    #    print('per, worker, and BIC 3: {:.2f}'.format(per), os.getpid(), bic[i])
 
-
+                #print('Floor', self.floor)
                 #print("BICCCC", bic1,  bic2, bic3, per) # See if all BICS are coming out the same
+                #bic_which_list.append(bic_which)
 
                 # Append the best-fit parameters to the period-iterated list.
                 best_params = {}
@@ -424,6 +477,7 @@ class Periodogram(object):
                     pbar.update_to(counter.value)
 
             return (bic, fit_params)
+            #return (bic, fit_params, bic_which_list)
         
         if self.verbose:
             global pbar
@@ -431,7 +485,7 @@ class Periodogram(object):
 
             counter = Value('i', 0, lock=True)
             pbar = TqdmUpTo(total=len(self.pers), position=0)
-
+        #import pdb; pdb.set_trace()
         if self.workers == 1:
             #print("In periodogram", self.post.params.keys())
             #sfsdfsd
